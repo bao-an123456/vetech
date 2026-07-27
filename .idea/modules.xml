@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/demo-common/demo-common.iml" filepath="$PROJECT_DIR$/demo-common/demo-common.iml" />
+      <module fileurl="file://$PROJECT_DIR$/demo-fccapi/demo-fccapi.iml" filepath="$PROJECT_DIR$/demo-fccapi/demo-fccapi.iml" />
+      <module fileurl="file://$PROJECT_DIR$/demo-rest/demo-rest.iml" filepath="$PROJECT_DIR$/demo-rest/demo-rest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/javademo.iml" filepath="$PROJECT_DIR$/.idea/javademo.iml" />
+    </modules>
+  </component>
+</project>

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VePositionMapper">
+
+    <!-- 批量新增 -->
+    <insert id="insertBatch">
+        INSERT INTO ve_ygrz_4849 (
+        id,
+        qybh,
+        dept_id,
+        ygid,
+        job_level,
+        supervisor_id,
+        hire_date,
+        position_code,
+        position_name,
+        status,
+        creator_id,
+        create_time,
+        update_time
+        )
+        VALUES
+        <foreach collection="list" item="e" separator=",">
+            (
+            #{e.id},
+            #{e.qybh},
+            #{e.deptId},
+            #{e.ygid},
+            #{e.jobLevel},
+            #{e.supervisorId},
+            #{e.hireDate},
+            #{e.positionCode},
+            #{e.positionName},
+            #{e.status},
+            #{e.creatorId},
+            #{e.createTime},
+            #{e.updateTime}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 更新（不碰 creator_id / create_time） -->
+    <update id="updateVePosition">
+        UPDATE ve_ygrz_4849
+        SET
+        qybh = #{qybh},
+        dept_id = #{deptId},
+        ygid = #{ygid},
+        job_level = #{jobLevel},
+        supervisor_id = #{supervisorId},
+        hire_date = #{hireDate},
+        position_code = #{positionCode},
+        position_name = #{positionName},
+        status = #{status},
+        update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 分页列表查询 -->
+    <select id="queryList" resultType="cn.vetech.charge.cloud.demo.server.service.vo.position.VePositionQryVO">
+        SELECT
+        id,
+        qybh,
+        dept_id AS deptId,
+        ygid AS ygid,
+        job_level AS jobLevel,
+        supervisor_id AS supervisorId,
+        hire_date AS hireDate,
+        position_code AS positionCode,
+        position_name AS positionName,
+        status,
+        creator_id AS creatorId,
+        create_time AS createTime,
+        update_time AS updateTime
+        FROM ve_ygrz_4849
+        WHERE qybh = #{dto.qybh}
+        <if test="dto.deptId != null and dto.deptId != ''">
+            AND dept_id = #{dto.deptId}
+        </if>
+        <if test="dto.ygid != null and dto.ygid != ''">
+            AND ygid = #{dto.ygid}
+        </if>
+        <if test="dto.jobLevel != null and dto.jobLevel != ''">
+            AND job_level = #{dto.jobLevel}
+        </if>
+        <if test="dto.supervisorId != null and dto.supervisorId != ''">
+            AND supervisor_id = #{dto.supervisorId}
+        </if>
+        <if test="dto.positionCode != null and dto.positionCode != ''">
+            AND position_code = #{dto.positionCode}
+        </if>
+        <if test="dto.positionName != null and dto.positionName != ''">
+            <bind name="nameLike" value="dto.positionName + '%'"/>
+            AND position_name LIKE #{nameLike}
+        </if>
+        <if test="dto.status != null and dto.status != ''">
+            AND status = #{dto.status}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <!-- 根据企业编号+员工ID查重 -->
+    <select id="selectByQybhAndYgid" resultType="cn.vetech.charge.cloud.demo.server.entity.VePosition4849">
+        SELECT
+        id, qybh, dept_id, ygid, job_level, supervisor_id, hire_date,
+        position_code, position_name, status, creator_id, create_time, update_time
+        FROM ve_ygrz_4849
+        WHERE qybh = #{qybh}
+        AND ygid = #{ygid}
+        LIMIT 1
+    </select>
+
+</mapper>

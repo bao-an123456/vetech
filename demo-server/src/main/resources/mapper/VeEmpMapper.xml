@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeEmpMapper">
+
+    <!-- 批量新增 -->
+    <insert id="insertBatch">
+        INSERT INTO ve_yg_4849 (
+        id,
+        qybh,
+        gh,
+        account,
+        password,
+        name,
+        english_surname,
+        english_name,
+        phone,
+        email,
+        address,
+        gender,
+        birthday,
+        account_status,
+        version_no,
+        creator_id,
+        create_time,
+        update_time
+        )
+        VALUES
+        <foreach collection="list" item="e" separator=",">
+            (
+            #{e.id},
+            #{e.qybh},
+            #{e.gh},
+            #{e.account},
+            #{e.password},
+            #{e.name},
+            #{e.englishSurname},
+            #{e.englishName},
+            #{e.phone},
+            #{e.email},
+            #{e.address},
+            #{e.gender},
+            #{e.birthday},
+            #{e.accountStatus},
+            #{e.versionNo},
+            #{e.creatorId},
+            #{e.createTime},
+            #{e.updateTime}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 更新员工信息（支持全字段更新，禁用/启用/密码更新均可复用） -->
+    <update id="updateVeEmp">
+        UPDATE ve_yg_4849
+        SET
+        qybh = #{qybh},
+        gh = #{gh},
+        account = #{account},
+        password = #{password},
+        name = #{name},
+        english_surname = #{englishSurname},
+        english_name = #{englishName},
+        phone = #{phone},
+        email = #{email},
+        address = #{address},
+        gender = #{gender},
+        birthday = #{birthday},
+        account_status = #{accountStatus},
+        version_no = #{versionNo},
+        creator_id = #{creatorId},
+        update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 分页查询员工列表（仅员工单表） -->
+    <select id="queryList" resultType="cn.vetech.charge.cloud.demo.server.service.vo.emp.VeEmpQryVO">
+        SELECT
+        t.id,
+        t.name,
+        t.gh,
+        t.qybh,
+        t.account_status AS accountStatus
+        FROM ve_yg_4849 t
+        WHERE t.qybh = #{dto.qybh}
+        <if test="dto.gh != null and dto.gh != ''">
+            AND t.gh = #{dto.gh}
+        </if>
+        <if test="dto.name != null and dto.name != ''">
+            <bind name="nameLike" value="dto.name + '%'"/>
+            AND t.name LIKE #{nameLike}
+        </if>
+        <if test="dto.accountStatus != null and dto.accountStatus != ''">
+            AND t.account_status = #{dto.accountStatus}
+        </if>
+        ORDER BY t.gh
+    </select>
+
+    <!-- 根据企业编号和工号查询员工（唯一性校验） -->
+    <select id="selectByQybhAndGh" resultType="cn.vetech.charge.cloud.demo.server.entity.VeEmp4849">
+        SELECT
+        id,
+        qybh,
+        gh,
+        account,
+        password,
+        name,
+        english_surname,
+        english_name,
+        phone,
+        email,
+        address,
+        gender,
+        birthday,
+        account_status,
+        version_no,
+        creator_id,
+        create_time,
+        update_time
+        FROM ve_yg_4849
+        WHERE qybh = #{qybh}
+        AND gh = #{gh}
+        LIMIT 1
+    </select>
+
+    <!-- ==================== 多表 ==================== -->
+    <!-- 员工列表带部门/岗位信息（三表关联分页） -->
+    <select id="selectEmpListWithDeptAndPos" resultType="cn.vetech.charge.cloud.demo.server.service.vo.multi.EmpWithDeptPosVO">
+        SELECT
+        yg.id,
+        yg.gh,
+        yg.name,
+        yg.english_surname AS englishSurname,
+        yg.english_name AS englishName,
+        yg.phone,
+        yg.email,
+        yg.gender,
+        yg.birthday,
+        yg.account_status AS accountStatus,
+        rz.dept_id AS deptId,
+        bm.bh,
+        bm.short_name AS shortName,
+        rz.position_code AS positionCode,
+        rz.position_name AS positionName,
+        rz.job_level AS jobLevel,
+        rz.supervisor_id AS supervisorId,
+        sj.name AS supervisorName
+        FROM ve_yg_4849 yg
+        LEFT JOIN ve_ygrz_4849 rz ON yg.id = rz.ygid AND yg.qybh = rz.qybh AND rz.status = '1'
+        LEFT JOIN ve_bm_4849 bm ON rz.dept_id = bm.dept_id AND rz.qybh = bm.qybh
+        LEFT JOIN ve_yg_4849 sj ON rz.supervisor_id = sj.id AND rz.qybh = sj.qybh
+        WHERE yg.qybh = #{dto.qybh}
+        <if test="dto.gh != null and dto.gh != ''">
+            AND yg.gh LIKE CONCAT('%', #{dto.gh}, '%')
+        </if>
+        <if test="dto.name != null and dto.name != ''">
+            <bind name="nameLike" value="dto.name + '%'"/>
+            AND yg.name LIKE #{nameLike}
+        </if>
+        <if test="dto.deptId != null and dto.deptId != ''">
+            AND rz.dept_id = #{dto.deptId}
+        </if>
+        <if test="dto.positionCode != null and dto.positionCode != ''">
+            AND rz.position_code = #{dto.positionCode}
+        </if>
+        <if test="dto.gender != null and dto.gender != ''">
+            AND yg.gender = #{dto.gender}
+        </if>
+        ORDER BY yg.gh
+    </select>
+
+    <!-- 查询某部门下的所有员工（分页） -->
+    <select id="selectEmpListByDept" resultType="cn.vetech.charge.cloud.demo.server.service.vo.multi.EmpByDeptQryVO">
+        SELECT
+        yg.id,
+        yg.gh,
+        yg.name,
+        yg.phone,
+        yg.email,
+        yg.gender,
+        rz.position_code AS positionCode,
+        rz.position_name AS positionName,
+        rz.job_level AS jobLevel,
+        rz.dept_id AS deptId,
+        bm.short_name AS shortName
+        FROM ve_yg_4849 yg
+        INNER JOIN ve_ygrz_4849 rz ON yg.id = rz.ygid AND yg.qybh = rz.qybh AND rz.status = '1'
+        INNER JOIN ve_bm_4849 bm ON rz.dept_id = bm.dept_id AND rz.qybh = bm.qybh
+        WHERE yg.qybh = #{dto.qybh}
+        AND bm.dept_id = #{dto.deptId}
+        <if test="dto.name != null and dto.name != ''">
+            <bind name="nameLike" value="dto.name + '%'"/>
+            AND yg.name LIKE #{nameLike}
+        </if>
+        ORDER BY yg.gh
+    </select>
+
+</mapper>

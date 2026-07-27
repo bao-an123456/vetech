@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeImportMapper">
+
+    <select id="selectByTaskId" resultType="cn.vetech.charge.cloud.demo.server.entity.VeImport4849">
+        SELECT
+        id,
+        qybh,
+        task_type AS taskType,
+        status,
+        task_name AS taskName,
+        record_count AS recordCount,
+        start_time AS startTime,
+        end_time AS endTime,
+        cost_time AS costTime,
+        creator_id AS creatorId,
+        create_time AS createTime
+        FROM t_drdc_rw_4849
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="queryList" resultType="cn.vetech.charge.cloud.demo.server.entity.VeImport4849">
+        SELECT
+        id,
+        qybh,
+        task_type AS taskType,
+        status,
+        task_name AS taskName,
+        record_count AS recordCount,
+        start_time AS startTime,
+        end_time AS endTime,
+        cost_time AS costTime,
+        creator_id AS creatorId,
+        create_time AS createTime
+        FROM t_drdc_rw_4849
+        WHERE 1=1
+        <if test="qybh != null and qybh != ''">
+            AND qybh = #{qybh}
+        </if>
+        <if test="taskType != null and taskType != ''">
+            AND task_type = #{taskType}
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <update id="updateVeImportExport">
+        UPDATE t_drdc_rw_4849
+        SET
+        status = #{status},
+        record_count = #{recordCount},
+        end_time = #{endTime},
+        cost_time = #{costTime}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

@@ -1,0 +1,7 @@
+package cn.vetech.charge.cloud.demo.server.service.vo.position;
+
+import io.swagger.annotations.ApiModel;
+
+@ApiModel(value = "任职信息修改")
+public class VePositionUpdVO {
+}

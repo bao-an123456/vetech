@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>cn.vetech.charge.cloud</groupId>
+        <version>2.0-SNAPSHOT</version>
+        <artifactId>demo-parent</artifactId>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>demo-server</artifactId>
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+    <dependencies>
+        <!-- 操作数据库需要 -->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>charge-cloud-database-parent</artifactId>
+        </dependency>
+        <!--工具类-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>charge-cloud-framework</artifactId>
+        </dependency>
+        <!-- redis缓存 -->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>charge-cloud-cache-redis</artifactId>
+        </dependency>
+        <!-- 数据库缓存-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>charge-cloud-cache-database</artifactId>
+        </dependency>
+        <!--表的异动日志-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>system-changelog-api</artifactId>
+        </dependency>
+        <!-- 在java内获取国际化工具-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>charge-cloud-language</artifactId>
+        </dependency>
+        <!--错误代码定义-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>fc-code</artifactId>
+        </dependency>
+        <!--引入定制化接口-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>fc-fcmade</artifactId>
+        </dependency>
+        <!--引入日志记录 -->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>system-commlog-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>demo-feign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>demo-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>system-fcfile-api</artifactId>
+        </dependency>
+        <!--对接消息公共服务-->
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>fcmq-replace-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>fc-connect</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>demo-fccapi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>demo-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.vetech.charge.cloud</groupId>
+            <artifactId>fccapi-common</artifactId>
+            <version>${fccapi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>cn.afterturn</groupId>
+            <artifactId>easypoi-base</artifactId>
+        </dependency>
+    </dependencies>
+</project>

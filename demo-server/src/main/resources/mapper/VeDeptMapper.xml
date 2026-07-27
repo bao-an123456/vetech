@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeDeptMapper">
+
+    <!-- 全字段更新 -->
+    <update id="updateVeDept">
+        UPDATE ve_bm_4849
+        SET
+        dept_id = #{deptId},
+        qybh = #{qybh},
+        bh = #{bh},
+        short_name = #{shortName},
+        parent_id = #{parentId},
+        detail_address = #{detailAddress},
+        status = #{status},
+        dept_id_path = #{deptIdPath},
+        dept_name_path = #{deptNamePath},
+        update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 分页列表查询 -->
+    <select id="queryList" resultType="cn.vetech.charge.cloud.demo.server.service.vo.dept.VeDeptQryVO">
+        SELECT
+        id,
+        dept_id AS deptId,
+        qybh,
+        bh,
+        short_name AS shortName,
+        parent_id AS parentId,
+        detail_address AS detailAddress,
+        status,
+        creator_id AS creatorId,
+        create_time AS createTime,
+        update_time AS updateTime,
+        dept_id_path AS deptIdPath,
+        dept_name_path AS deptNamePath
+        FROM ve_bm_4849
+        WHERE qybh = #{dto.qybh}
+        <if test="dto.deptId != null and dto.deptId != ''">
+            AND dept_id = #{dto.deptId}
+        </if>
+        <if test="dto.bh != null and dto.bh != ''">
+            AND bh = #{dto.bh}
+        </if>
+        <if test="dto.shortName != null and dto.shortName != ''">
+            <bind name="nameLike" value="dto.shortName + '%'"/>
+            AND short_name LIKE #{nameLike}
+        </if>
+        <if test="dto.parentId != null and dto.parentId != ''">
+            AND parent_id = #{dto.parentId}
+        </if>
+        <if test="dto.status != null and dto.status != ''">
+            AND status = #{dto.status}
+        </if>
+        ORDER BY bh
+    </select>
+
+    <!-- 根据企业编号+部门id查重 -->
+    <select id="selectByQybhAndDeptId" resultType="cn.vetech.charge.cloud.demo.server.entity.VeDept4849">
+        SELECT
+        id, dept_id, qybh, bh, short_name, parent_id, detail_address,
+        status, creator_id, create_time, update_time, dept_id_path, dept_name_path
+        FROM ve_bm_4849
+        WHERE qybh = #{qybh}
+        AND dept_id = #{deptId}
+        LIMIT 1
+    </select>
+
+    <!-- 根据企业编号+部门编号查重 -->
+    <select id="selectByQybhAndBh" resultType="cn.vetech.charge.cloud.demo.server.entity.VeDept4849">
+        SELECT
+        id, dept_id, qybh, bh, short_name, parent_id, detail_address,
+        status, creator_id, create_time, update_time, dept_id_path, dept_name_path
+        FROM ve_bm_4849
+        WHERE qybh = #{qybh}
+        AND bh = #{bh}
+        LIMIT 1
+    </select>
+
+    <!-- 根据parentId查询子部门（用于级联删除） -->
+    <select id="selectByParentId" resultType="cn.vetech.charge.cloud.demo.server.entity.VeDept4849">
+        SELECT
+        id, dept_id, qybh, bh, short_name, parent_id, detail_address,
+        status, creator_id, create_time, update_time, dept_id_path, dept_name_path
+        FROM ve_bm_4849
+        WHERE parent_id = #{parentId}
+    </select>
+
+    <!-- 部门树形结构查询 -->
+    <select id="selectDeptTree" resultType="cn.vetech.charge.cloud.demo.server.service.vo.multi.DeptTreeQryVO">
+        SELECT
+        id,
+        short_name AS shortName,
+        parent_id AS parentId
+        FROM ve_bm_4849
+        WHERE qybh = #{qybh}
+        AND status = '1'
+        ORDER BY dept_id
+    </select>
+
+</mapper>
