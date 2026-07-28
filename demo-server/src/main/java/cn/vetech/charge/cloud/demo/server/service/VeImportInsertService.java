@@ -18,6 +18,7 @@ import cn.vetech.charge.fccapi.FccApiUserVO;
 import cn.vetech.charge.cloud.modules.utils.IdGenerator;
 import cn.vetech.charge.cloud.demo.common.config.SyncConfigProperties;
 import com.baomidou.mybatisplus.mapper.EntityWrapper;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -98,13 +99,14 @@ public class VeImportInsertService {
                 importList = new ArrayList<>();
             }
 
-            int batchSize = syncConfigProperties.getPageSize();
+            int queryPageSize = syncConfigProperties.getQueryPageSize();
+            int writeBatchSize = syncConfigProperties.getWriteBatchSize();
             // 提取所有 Excel 中待导入的部门编号
             Set<String> excelBhSet = importList.stream().map(VeDeptImportVO::getBh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
 
             Set<String> existDeptIds = new HashSet<>();
             if (CollectionUtils.isNotEmpty(excelBhSet)) {
-                for (List<String> bhChunk : partitionList(excelBhSet, batchSize)) {
+                for (List<String> bhChunk : partitionList(excelBhSet, queryPageSize)) {
                     List<VeDept4849> existList = veDeptMapper.selectList(new EntityWrapper<VeDept4849>().eq("qybh", openApiUserVO.getQybh()).in("bh", bhChunk));
                     if (existList != null) {
                         for (VeDept4849 d : existList) {
@@ -150,8 +152,11 @@ public class VeImportInsertService {
             // 剩余无法解析上级的 Candidate 计入错误
             errorNum += candidateList.size();
 
-            for (VeDept4849 dept : successList) {
-                veDeptMapper.insert(dept);
+            for (int i = 0; i < successList.size(); i += writeBatchSize) {
+                List<VeDept4849> batch = successList.subList(i, Math.min(i + writeBatchSize, successList.size()));
+                for (VeDept4849 dept : batch) {
+                    veDeptMapper.insert(dept);
+                }
             }
             finishTask(task, "3", successList.size());
         } catch (Exception e) {
@@ -271,14 +276,15 @@ public class VeImportInsertService {
                 importList = new ArrayList<>();
             }
             String qybh = openApiUserVO.getQybh();
-            int batchSize = syncConfigProperties.getPageSize();
+            int queryPageSize = syncConfigProperties.getQueryPageSize();
+            int writeBatchSize = syncConfigProperties.getWriteBatchSize();
 
             Set<String> allBatchGhSet = importList.stream().map(VeEmpImportVO::getGh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
             Set<String> allBatchDeptBhSet = importList.stream().map(VeEmpImportVO::getDeptBh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
 
             Set<String> existGhSet = new HashSet<>();
             if (!allBatchGhSet.isEmpty()) {
-                for (List<String> ghChunk : partitionList(allBatchGhSet, batchSize)) {
+                for (List<String> ghChunk : partitionList(allBatchGhSet, queryPageSize)) {
                     List<VeEmp4849> existEmpList = veEmpMapper.selectList(
                             new EntityWrapper<VeEmp4849>().eq("qybh", qybh).in("gh", ghChunk));
                     if (existEmpList != null) {
@@ -291,7 +297,7 @@ public class VeImportInsertService {
 
             Map<String, String> bhToDeptIdMap = new HashMap<>();
             if (!allBatchDeptBhSet.isEmpty()) {
-                for (List<String> deptBhChunk : partitionList(allBatchDeptBhSet, batchSize)) {
+                for (List<String> deptBhChunk : partitionList(allBatchDeptBhSet, queryPageSize)) {
                     List<VeDept4849> deptList = veDeptMapper.selectList(
                             new EntityWrapper<VeDept4849>().eq("qybh", qybh).in("bh", deptBhChunk));
                     if (deptList != null) {
@@ -329,12 +335,12 @@ public class VeImportInsertService {
                 positionList.add(position);
             }
 
-            for (int i = 0; i < empList.size(); i += batchSize) {
-                List<VeEmp4849> batch = empList.subList(i, Math.min(i + batchSize, empList.size()));
+            for (int i = 0; i < empList.size(); i += writeBatchSize) {
+                List<VeEmp4849> batch = empList.subList(i, Math.min(i + writeBatchSize, empList.size()));
                 veEmpMapper.insertBatch(batch);
             }
-            for (int i = 0; i < positionList.size(); i += batchSize) {
-                List<VePosition4849> batch = positionList.subList(i, Math.min(i + batchSize, positionList.size()));
+            for (int i = 0; i < positionList.size(); i += writeBatchSize) {
+                List<VePosition4849> batch = positionList.subList(i, Math.min(i + writeBatchSize, positionList.size()));
                 vePositionMapper.insertBatch(batch);
             }
 

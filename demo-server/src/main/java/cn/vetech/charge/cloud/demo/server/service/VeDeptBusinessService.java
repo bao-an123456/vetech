@@ -185,17 +185,22 @@ public class VeDeptBusinessService {
     }
 
     private void mergeTempDeptToBusinessTable(String qybh, List<String> auditLogs, int batchSize) {
-        int pageSize = (batchSize > 0) ? batchSize : syncConfigProperties.getPageSize();
+        int queryPageSize = syncConfigProperties.getQueryPageSize(); // 200 条/批，防止 Druid 告警
+        int writeBatchSize = (batchSize > 0) ? batchSize : syncConfigProperties.getWriteBatchSize(); // 500 条/批落库
+
         int totalTempCount = veDeptTempMapper.selectCount(new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh));
         if (totalTempCount <= 0) {
             return;
         }
 
-        int totalPages = (int) Math.ceil((double) totalTempCount / pageSize);
+        int totalPages = (int) Math.ceil((double) totalTempCount / queryPageSize);
+
+        List<VeDept4849> insertList = new ArrayList<>();
+        List<VeDept4849> updateList = new ArrayList<>();
 
         for (int page = 1; page <= totalPages; page++) {
             List<VeDeptTemp4849> tempDepts = veDeptTempMapper.selectPage(
-                    new Page<VeDeptTemp4849>(page, pageSize),
+                    new Page<VeDeptTemp4849>(page, queryPageSize),
                     new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh)
             );
             if (CollectionUtils.isEmpty(tempDepts)) {
@@ -219,9 +224,6 @@ public class VeDeptBusinessService {
                 }
             }
 
-            List<VeDept4849> insertList = new ArrayList<>();
-            List<VeDept4849> updateList = new ArrayList<>();
-
             for (VeDeptTemp4849 temp : tempDepts) {
                 VeDept4849 exist = existBhMap.get(temp.getBh());
                 if (exist == null) {
@@ -237,13 +239,17 @@ public class VeDeptBusinessService {
                 }
             }
 
-            if (CollectionUtils.isNotEmpty(insertList)) {
-                veDeptMapper.insertBatch(insertList);
+            while (insertList.size() >= writeBatchSize) {
+                List<VeDept4849> batch = new ArrayList<>(insertList.subList(0, writeBatchSize));
+                veDeptMapper.insertBatch(batch);
+                insertList.subList(0, writeBatchSize).clear();
             }
-            if (CollectionUtils.isNotEmpty(updateList)) {
-                for (VeDept4849 upd : updateList) {
+            while (updateList.size() >= writeBatchSize) {
+                List<VeDept4849> batch = new ArrayList<>(updateList.subList(0, writeBatchSize));
+                for (VeDept4849 upd : batch) {
                     veDeptMapper.updateVeDept(upd);
                 }
+                updateList.subList(0, writeBatchSize).clear();
             }
 
             try {
@@ -251,6 +257,23 @@ public class VeDeptBusinessService {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+
+        if (CollectionUtils.isNotEmpty(insertList)) {
+            for (int i = 0; i < insertList.size(); i += writeBatchSize) {
+                List<VeDept4849> batch = insertList.subList(i, Math.min(i + writeBatchSize, insertList.size()));
+                veDeptMapper.insertBatch(batch);
+            }
+            insertList.clear();
+        }
+        if (CollectionUtils.isNotEmpty(updateList)) {
+            for (int i = 0; i < updateList.size(); i += writeBatchSize) {
+                List<VeDept4849> batch = updateList.subList(i, Math.min(i + writeBatchSize, updateList.size()));
+                for (VeDept4849 upd : batch) {
+                    veDeptMapper.updateVeDept(upd);
+                }
+            }
+            updateList.clear();
         }
     }
 

@@ -113,17 +113,18 @@ public class VeImportSaveService {
                     importList = new ArrayList<>();
                 }
                 String qybh = openApiUserVO.getQybh();
-                int batchSize = syncConfigProperties.getPageSize();
+                int queryPageSize = syncConfigProperties.getQueryPageSize();
+                int writeBatchSize = syncConfigProperties.getWriteBatchSize();
                 task.setRecordCount(importList.size());
                 veImportInsertDaoService.update(task);
 
-                // 阶段 1: 内存/数据库索引预热 (按 500 个一批切片检索 ID + QYBH + GH)
+                // 阶段 1: 内存/数据库索引预热 (按 200 个一批切片检索，防止 Druid 告警)
                 Set<String> allBatchGhSet = importList.stream().map(VeEmpImportVO::getGh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
                 Set<String> allBatchDeptBhSet = importList.stream().map(VeEmpImportVO::getDeptBh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
 
                 Map<String, VeEmp4849> existEmpMap = new HashMap<>();
                 if (CollectionUtils.isNotEmpty(allBatchGhSet)) {
-                    for (List<String> ghChunk : partitionList(allBatchGhSet, batchSize)) {
+                    for (List<String> ghChunk : partitionList(allBatchGhSet, queryPageSize)) {
                         List<VeEmp4849> dbEmps = veEmpMapper.selectList(new EntityWrapper<VeEmp4849>().eq("qybh", qybh).in("gh", ghChunk));
                         if (dbEmps != null) {
                             for (VeEmp4849 e : dbEmps) {
@@ -136,7 +137,7 @@ public class VeImportSaveService {
                 Map<String, VePosition4849> existPosMap = new HashMap<>();
                 if (!existEmpMap.isEmpty()) {
                     List<String> ygids = existEmpMap.values().stream().map(VeEmp4849::getId).collect(Collectors.toList());
-                    for (List<String> ygidChunk : partitionList(ygids, batchSize)) {
+                    for (List<String> ygidChunk : partitionList(ygids, queryPageSize)) {
                         List<VePosition4849> dbPositions = vePositionMapper.selectList(new EntityWrapper<VePosition4849>().eq("qybh", qybh).in("ygid", ygidChunk));
                         if (dbPositions != null) {
                             for (VePosition4849 p : dbPositions) {
@@ -148,7 +149,7 @@ public class VeImportSaveService {
 
                 Map<String, String> bhToDeptIdMap = new HashMap<>();
                 if (CollectionUtils.isNotEmpty(allBatchDeptBhSet)) {
-                    for (List<String> deptBhChunk : partitionList(allBatchDeptBhSet, batchSize)) {
+                    for (List<String> deptBhChunk : partitionList(allBatchDeptBhSet, queryPageSize)) {
                         List<VeDept4849> dbDepts = veDeptMapper.selectList(new EntityWrapper<VeDept4849>().eq("qybh", qybh).in("bh", deptBhChunk));
                         if (dbDepts != null) {
                             for (VeDept4849 d : dbDepts) {
@@ -243,15 +244,15 @@ public class VeImportSaveService {
                     }
                     processedCount++;
 
-                    // 阶段 3: 分批落库与防 OOM 清空 (满 batchSize 写入并 clear)
-                    if (insertEmpList.size() >= batchSize) {
+                    // 阶段 3: 分批落库与防 OOM 清空 (满 writeBatchSize 500 写入并 clear)
+                    if (insertEmpList.size() >= writeBatchSize) {
                         veEmpMapper.insertBatch(insertEmpList);
                         vePositionMapper.insertBatch(insertPosList);
                         insertEmpList.clear();
                         insertPosList.clear();
                         updateProgress(task, processedCount);
                     }
-                    if (updateEmpList.size() >= batchSize) {
+                    if (updateEmpList.size() >= writeBatchSize) {
                         veEmpMapper.updateBatch(updateEmpList);
                         vePositionMapper.updateBatch(updatePosList);
                         updateEmpList.clear();
@@ -309,15 +310,16 @@ public class VeImportSaveService {
                     importList = new ArrayList<>();
                 }
                 String qybh = openApiUserVO.getQybh();
-                int batchSize = syncConfigProperties.getPageSize();
+                int queryPageSize = syncConfigProperties.getQueryPageSize();
+                int writeBatchSize = syncConfigProperties.getWriteBatchSize();
                 task.setRecordCount(importList.size());
                 veImportInsertDaoService.update(task);
 
-                // 检索已存在的部门 (按 500 个一批分块查询)
+                // 检索已存在的部门 (按 200 个一批分块查询)
                 Set<String> allBhs = importList.stream().map(VeDeptImportVO::getBh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
                 Map<String, VeDept4849> existDeptMap = new HashMap<>();
                 if (CollectionUtils.isNotEmpty(allBhs)) {
-                    for (List<String> bhChunk : partitionList(allBhs, batchSize)) {
+                    for (List<String> bhChunk : partitionList(allBhs, queryPageSize)) {
                         List<VeDept4849> dbDepts = veDeptMapper.selectList(new EntityWrapper<VeDept4849>().eq("qybh", qybh).in("bh", bhChunk));
                         if (dbDepts != null) {
                             for (VeDept4849 d : dbDepts) {
@@ -368,12 +370,12 @@ public class VeImportSaveService {
                     }
                     processedCount++;
 
-                    if (insertList.size() >= batchSize) {
+                    if (insertList.size() >= writeBatchSize) {
                         veDeptMapper.insertBatch(insertList);
                         insertList.clear();
                         updateProgress(task, processedCount);
                     }
-                    if (updateList.size() >= batchSize) {
+                    if (updateList.size() >= writeBatchSize) {
                         veDeptMapper.updateBatch(updateList);
                         updateList.clear();
                         updateProgress(task, processedCount);

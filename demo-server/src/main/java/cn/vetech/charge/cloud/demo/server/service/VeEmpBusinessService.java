@@ -268,20 +268,25 @@ public class VeEmpBusinessService {
     }
 
     /**
-     * 将临时表数据合并写入正式业务表（保持手工维护数据不改变，按 500 个一批分页合并）
+     * 将临时表数据合并写入正式业务表（保持手工维护数据不改变，查询按 200 条/批切片避开 Druid 告警，写入按 500 条/批落库）
      */
     private void mergeTempToBusinessTable(String qybh, boolean isTriggeredCircuitBreaker, List<String> auditLogs, int batchSize) {
-        int pageSize = (batchSize > 0) ? batchSize : syncConfigProperties.getPageSize();
+        int queryPageSize = syncConfigProperties.getQueryPageSize(); // 200 条/批，防 Druid 告警
+        int writeBatchSize = (batchSize > 0) ? batchSize : syncConfigProperties.getWriteBatchSize(); // 500 条/批，高效落库
+
         int totalTempCount = veEmpTempMapper.selectCount(new EntityWrapper<VeEmpTemp4849>().eq("qybh", qybh));
         if (totalTempCount <= 0) {
             return;
         }
 
-        int totalPages = (int) Math.ceil((double) totalTempCount / pageSize);
+        int totalPages = (int) Math.ceil((double) totalTempCount / queryPageSize);
+
+        List<VeEmp4849> insertList = new ArrayList<>();
+        List<VeEmp4849> updateList = new ArrayList<>();
 
         for (int page = 1; page <= totalPages; page++) {
             List<VeEmpTemp4849> tempEmps = veEmpTempMapper.selectPage(
-                    new Page<VeEmpTemp4849>(page, pageSize),
+                    new Page<VeEmpTemp4849>(page, queryPageSize),
                     new EntityWrapper<VeEmpTemp4849>().eq("qybh", qybh)
             );
             if (CollectionUtils.isEmpty(tempEmps)) {
@@ -305,9 +310,6 @@ public class VeEmpBusinessService {
                 }
             }
 
-            List<VeEmp4849> insertList = new ArrayList<>();
-            List<VeEmp4849> updateList = new ArrayList<>();
-
             for (VeEmpTemp4849 temp : tempEmps) {
                 VeEmp4849 exist = existGhMap.get(temp.getGh());
 
@@ -329,13 +331,18 @@ public class VeEmpBusinessService {
                 }
             }
 
-            if (CollectionUtils.isNotEmpty(insertList)) {
-                veEmpMapper.insertBatch(insertList);
+            // 当积累满/超过 500 条时，严格拆分为 500 条/批进行落库
+            while (insertList.size() >= writeBatchSize) {
+                List<VeEmp4849> batch = new ArrayList<>(insertList.subList(0, writeBatchSize));
+                veEmpMapper.insertBatch(batch);
+                insertList.subList(0, writeBatchSize).clear();
             }
-            if (CollectionUtils.isNotEmpty(updateList)) {
-                for (VeEmp4849 upd : updateList) {
+            while (updateList.size() >= writeBatchSize) {
+                List<VeEmp4849> batch = new ArrayList<>(updateList.subList(0, writeBatchSize));
+                for (VeEmp4849 upd : batch) {
                     veEmpMapper.updateVeEmp(upd);
                 }
+                updateList.subList(0, writeBatchSize).clear();
             }
 
             try {
@@ -343,6 +350,24 @@ public class VeEmpBusinessService {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+
+        // 刷新尾部剩余数据（仍按最多 500 条/批拆分提交）
+        if (CollectionUtils.isNotEmpty(insertList)) {
+            for (int i = 0; i < insertList.size(); i += writeBatchSize) {
+                List<VeEmp4849> batch = insertList.subList(i, Math.min(i + writeBatchSize, insertList.size()));
+                veEmpMapper.insertBatch(batch);
+            }
+            insertList.clear();
+        }
+        if (CollectionUtils.isNotEmpty(updateList)) {
+            for (int i = 0; i < updateList.size(); i += writeBatchSize) {
+                List<VeEmp4849> batch = updateList.subList(i, Math.min(i + writeBatchSize, updateList.size()));
+                for (VeEmp4849 upd : batch) {
+                    veEmpMapper.updateVeEmp(upd);
+                }
+            }
+            updateList.clear();
         }
     }
 

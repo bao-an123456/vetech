@@ -26,7 +26,17 @@ public class SyncConfigProperties {
     private long pageSleepMs = 150L;
 
     /**
-     * 分页查询/批量处理大小（固定 500 个一批）
+     * 数据库查询分页/切片批次大小（按 200 个一批，避开 Druid VeStatFilter 200条告警限制）
+     */
+    private int queryPageSize = 200;
+
+    /**
+     * 数据库写入/批量处理大小（按 500 个一批，保证高吞吐批量落库）
+     */
+    private int writeBatchSize = 500;
+
+    /**
+     * 兼容通用批次大小设置（默认 500 个一批）
      */
     private int pageSize = 500;
 
