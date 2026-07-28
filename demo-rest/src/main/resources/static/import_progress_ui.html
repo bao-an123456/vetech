@@ -98,7 +98,7 @@
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         .form-group label {
@@ -303,13 +303,8 @@
         </div>
 
         <div class="form-group">
-            <label>后端服务基准地址 (Server Base URL)</label>
-            <input type="text" class="input-box" id="serverBaseUrl" placeholder="如 http://localhost:12345">
-        </div>
-
-        <div class="form-group">
-            <label id="urlLabel">Excel 文件地址 (本地路径如 F:\dep.xlsx 或 网络URL)</label>
-            <input type="text" class="input-box" id="fileUrl" value="F:\dep.xlsx" placeholder="例如 F:\dep.xlsx 或 http://localhost:12345/demo.xlsx">
+            <label id="urlLabel">Excel 文件路径 / URL</label>
+            <input type="text" class="input-box" id="fileUrl" placeholder="请填写本地路径 (如 F:\dep.xlsx) 或 网络 URL">
         </div>
 
         <button class="submit-btn" onclick="startImportSave()">一键开启覆盖保存导入 (自动弹出进度框)</button>
@@ -349,43 +344,30 @@
         let pollTimer = null;
         let activeTaskId = null;
 
-        // 初始化基准服务地址
-        window.addEventListener('DOMContentLoaded', () => {
-            const serverInput = document.getElementById('serverBaseUrl');
-            if (window.location.protocol.startsWith('http')) {
-                serverInput.value = window.location.origin;
-            } else {
-                serverInput.value = 'http://localhost:12345';
-            }
-        });
-
         function getBaseUrl() {
-            let url = document.getElementById('serverBaseUrl').value.trim();
-            if (!url) {
-                url = 'http://localhost:12345';
+            if (window.location.protocol.startsWith('http')) {
+                return window.location.origin;
             }
-            return url.replace(/\/+$/, '');
+            return 'http://localhost:12345';
         }
 
         function switchType(type) {
             currentType = type;
             document.getElementById('tabEmp').classList.toggle('active', type === 'emp');
             document.getElementById('tabDept').classList.toggle('active', type === 'dept');
-            document.getElementById('urlLabel').innerText = type === 'emp' ? '员工 Excel 文件地址 (FileUrl)' : '部门 Excel 文件地址 (FileUrl)';
-            const baseUrl = getBaseUrl();
-            document.getElementById('fileUrl').value = type === 'emp' ? `${baseUrl}/demo_emp.xlsx` : `${baseUrl}/demo_dept.xlsx`;
+            document.getElementById('urlLabel').innerText = type === 'emp' ? '员工 Excel 文件路径 / URL' : '部门 Excel 文件路径 / URL';
         }
 
         async function startImportSave() {
             const fileUrl = document.getElementById('fileUrl').value.trim();
             if (!fileUrl) {
-                alert("请输入 Excel 文件地址！");
+                alert("请先填写 Excel 文件路径或 URL！");
                 return;
             }
 
             const baseUrl = getBaseUrl();
 
-            // 1. 自动弹出进度框
+            // 1. 自动弹出进度框 Modal
             openModal();
 
             // 2. 发起异步 Save 导入请求
@@ -403,7 +385,7 @@
 
                 if (data && data.response && data.response.taskId) {
                     activeTaskId = data.response.taskId;
-                    // 3. 自动开启智能进度跟踪
+                    // 3. 自动开启高频平滑进度追踪
                     startAutoPolling(baseUrl, activeTaskId);
                 } else {
                     document.getElementById('statusText').innerText = "请求异常：" + (data.message || (data.status ? "HTTP " + data.status : "接口未找到"));
@@ -412,7 +394,7 @@
                 }
             } catch (err) {
                 console.error("请求失败", err);
-                document.getElementById('statusText').innerText = "网络通信异常 (请确认地址与跨域)";
+                document.getElementById('statusText').innerText = "网络通信异常 (请确认地址与端口)";
                 document.getElementById('spinner').style.display = 'none';
                 document.getElementById('closeBtn').style.display = 'inline-block';
             }
