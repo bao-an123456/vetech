@@ -58,6 +58,9 @@ public class VeDept4849 extends BaseEntity {
     @ApiModelProperty(value = "部门名称全路径,中间用,号隔开", dataType = "string")
     private String deptNamePath;
 
+    @ApiModelProperty(value = "数据来源，1手工维护，2数据同步", dataType = "string")
+    private String dataSource;
+
     @Override
     public String toString() {
         return JsonMapper.nonEmptyMapper().toJson(this);

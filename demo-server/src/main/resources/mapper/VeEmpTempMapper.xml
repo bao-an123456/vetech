@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeEmpTempMapper">
+
+    <insert id="insertBatch">
+        INSERT INTO ve_yg_4849_temp (
+        id, qybh, gh, account, password, name, english_surname, english_name,
+        phone, email, address, gender, birthday, account_status, version_no, creator_id,
+        create_time, data_source, update_time
+        ) VALUES
+        <foreach collection="list" item="e" separator=",">
+            (
+            #{e.id}, #{e.qybh}, #{e.gh}, #{e.account}, #{e.password}, #{e.name},
+            #{e.englishSurname}, #{e.englishName}, #{e.phone}, #{e.email}, #{e.address},
+            #{e.gender}, #{e.birthday}, #{e.accountStatus}, #{e.versionNo}, #{e.creatorId},
+            #{e.createTime}, #{e.dataSource}, #{e.updateTime}
+            )
+        </foreach>
+    </insert>
+
+    <select id="selectMaxUpdateTime" resultType="java.util.Date">
+        SELECT MAX(update_time) FROM ve_yg_4849_temp WHERE qybh = #{qybh}
+    </select>
+
+    <delete id="clearTempTable">
+        DELETE FROM ve_yg_4849_temp WHERE qybh = #{qybh}
+    </delete>
+
+</mapper>

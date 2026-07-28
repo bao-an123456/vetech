@@ -1,49 +1,67 @@
 package cn.vetech.charge.cloud.demo.server.service;
 
+import cn.vetech.charge.cloud.demo.common.config.SyncConfigProperties;
 import cn.vetech.charge.cloud.demo.common.constant.DemoExceptionEnum;
 import cn.vetech.charge.cloud.demo.server.dao.VeDeptDaoServiceImpl;
 import cn.vetech.charge.cloud.demo.server.entity.VeDept4849;
-import cn.vetech.charge.cloud.demo.server.service.dto.multi.DeptTreeQryDTO;
+import cn.vetech.charge.cloud.demo.server.entity.VeDeptTemp4849;
+import cn.vetech.charge.cloud.demo.server.mapper.VeDeptMapper;
+import cn.vetech.charge.cloud.demo.server.mapper.VeDeptTempMapper;
 import cn.vetech.charge.cloud.demo.server.service.dto.dept.VeDeptQryDTO;
 import cn.vetech.charge.cloud.demo.server.service.dto.dept.VeDeptSaveDTO;
 import cn.vetech.charge.cloud.demo.server.service.dto.dept.VeDeptUpdDTO;
-import cn.vetech.charge.cloud.demo.server.service.vo.multi.DeptTreeQryVO;
+import cn.vetech.charge.cloud.demo.server.service.dto.multi.DeptTreeQryDTO;
 import cn.vetech.charge.cloud.demo.server.service.vo.dept.VeDeptQryVO;
+import cn.vetech.charge.cloud.demo.server.service.vo.multi.DeptTreeQryVO;
+import cn.vetech.charge.cloud.demo.server.utils.DataCleanUtils;
 import cn.vetech.charge.cloud.exception.SystemException;
 import cn.vetech.charge.cloud.modules.utils.IdGenerator;
+import com.baomidou.mybatisplus.mapper.EntityWrapper;
 import com.baomidou.mybatisplus.plugins.Page;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 @Service
 public class VeDeptBusinessService {
 
+    private static final Logger log = LoggerFactory.getLogger(VeDeptBusinessService.class);
+
     @Autowired
     private VeDeptDaoServiceImpl veDeptDaoService;
+
+    @Autowired
+    private VeDeptMapper veDeptMapper;
+
+    @Autowired
+    private VeDeptTempMapper veDeptTempMapper;
+
+    @Autowired
+    private SyncConfigProperties syncConfigProperties;
+
+    @Autowired
+    private SyncAuditLogService syncAuditLogService;
+
+    @Autowired
+    private SyncMqNotificationService syncMqNotificationService;
 
     // ==================== 增 ====================
     @Transactional(rollbackFor = Exception.class)
     public void save(VeDeptSaveDTO dto) throws SystemException {
-        // 校验 deptId 是否已存在
         VeDept4849 exist = veDeptDaoService.selectByQybhAndDeptId(dto.getQybh(), dto.getDeptId());
         if (exist != null) {
             throw new SystemException(DemoExceptionEnum.DEMO_0002, "该部门已存在，请勿重复添加");
         }
-        // 校验 bh 是否已存在
         VeDept4849 exist2 = veDeptDaoService.selectByQybhAndBh(dto.getQybh(), dto.getBh());
         if (exist2 != null) {
             throw new SystemException(DemoExceptionEnum.DEMO_0002, "该部门编号已存在，请勿重复添加");
         }
-        // 校验父部门是否存在（非根部门）
         validateParentExists(dto.getParentId());
         Date nowtime = new Date();
         String id = IdGenerator.getHexId();
@@ -58,12 +76,231 @@ public class VeDeptBusinessService {
         entity.setDetailAddress(dto.getDetailAddress());
         entity.setStatus(dto.getStatus());
         entity.setCreatorId("me");
+        entity.setDataSource("1"); // 手工维护标记
         entity.setCreateTime(nowtime);
         entity.setUpdateTime(nowtime);
 
         buildDeptPath(entity);
 
         veDeptDaoService.insertVeDept(entity);
+    }
+
+    // ==================== 5万部门批量/增量同步核心逻辑 (支持 500个一批) ====================
+
+    @Transactional(rollbackFor = Exception.class)
+    public String syncDeptBatchData(String qybh, boolean isIncremental) {
+        int batchSize = 500; // 500 个一批
+        String batchId = UUID.randomUUID().toString().replace("-", "");
+        List<String> auditLogs = new ArrayList<>();
+        auditLogs.add("【部门数据同步开启】批次ID: " + batchId + ", 企业编号: " + qybh + ", 增量同步: " + isIncremental);
+
+        try {
+            // 1. 清理临时表历史记录
+            veDeptTempMapper.clearTempTable(qybh);
+
+            // 2. 增量点位获取
+            Date lastSyncTime = null;
+            if (isIncremental) {
+                lastSyncTime = veDeptTempMapper.selectMaxUpdateTime(qybh);
+                if (lastSyncTime == null) {
+                    List<VeDept4849> latestDepts = veDeptMapper.selectList(
+                            new EntityWrapper<VeDept4849>().eq("qybh", qybh).orderBy("update_time", false)
+                    );
+                    if (CollectionUtils.isNotEmpty(latestDepts)) {
+                        lastSyncTime = latestDepts.get(0).getUpdateTime();
+                    }
+                }
+            }
+
+            // 3. 网络接口带重试机制获取总条数
+            int totalCount = fetchDeptTotalCountWithRetry(qybh, lastSyncTime, auditLogs);
+            int totalPages = (int) Math.ceil((double) totalCount / batchSize);
+            int fetchedTempCount = 0;
+
+            for (int page = 1; page <= totalPages; page++) {
+                List<VeDept4849> pageDataList = fetchDeptPageDataWithRetry(qybh, lastSyncTime, page, batchSize, auditLogs);
+                if (CollectionUtils.isEmpty(pageDataList)) {
+                    continue;
+                }
+
+                List<VeDeptTemp4849> tempBatch = new ArrayList<>();
+                for (VeDept4849 dept : pageDataList) {
+                    VeDeptTemp4849 temp = new VeDeptTemp4849();
+                    temp.setId(dept.getId() != null ? dept.getId() : IdGenerator.getHexId());
+                    temp.setDeptId(dept.getDeptId());
+                    temp.setQybh(qybh);
+                    temp.setBh(dept.getBh());
+                    temp.setShortName(dept.getShortName());
+                    temp.setParentId(dept.getParentId());
+                    temp.setDetailAddress(dept.getDetailAddress());
+                    temp.setStatus(dept.getStatus());
+                    temp.setCreatorId("SYNC");
+                    temp.setDataSource("2");
+                    temp.setCreateTime(dept.getCreateTime() != null ? dept.getCreateTime() : new Date());
+                    temp.setUpdateTime(dept.getUpdateTime() != null ? dept.getUpdateTime() : new Date());
+                    temp.setDeptIdPath(dept.getDeptIdPath());
+                    temp.setDeptNamePath(dept.getDeptNamePath());
+                    tempBatch.add(temp);
+                }
+
+                // 500 个一批批量写入临时表
+                if (CollectionUtils.isNotEmpty(tempBatch)) {
+                    veDeptTempMapper.insertBatch(tempBatch);
+                    fetchedTempCount += tempBatch.size();
+                }
+
+                // 资源释放
+                pageDataList.clear();
+                tempBatch.clear();
+                try {
+                    Thread.sleep(syncConfigProperties.getPageSleepMs());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // 4. 数据完整性校验：必须整批获取完整才合并
+            if (fetchedTempCount < totalCount) {
+                String integrityErr = String.format("【部门数据完整性校验失败】预期: %d, 实际落临时表: %d", totalCount, fetchedTempCount);
+                auditLogs.add(integrityErr);
+                syncMqNotificationService.sendAlertMessage("SYNC_DEPT_INTEGRITY_FAILED", integrityErr);
+                throw new RuntimeException(integrityErr);
+            }
+
+            // 5. 从临时表合并到正式业务表（保护手工数据）
+            mergeTempDeptToBusinessTable(qybh, auditLogs, batchSize);
+            auditLogs.add("【部门数据同步完成】成功合并处理 " + fetchedTempCount + " 条部门数据");
+
+        } catch (Exception e) {
+            String errorMsg = "【部门同步异常中断】" + e.getMessage();
+            log.error(errorMsg, e);
+            auditLogs.add(errorMsg);
+            syncMqNotificationService.sendAlertMessage("SYNC_DEPT_EXCEPTION", errorMsg);
+            throw new RuntimeException("部门同步失败: " + e.getMessage(), e);
+        } finally {
+            return syncAuditLogService.writeAndUploadAuditLog(batchId, auditLogs);
+        }
+    }
+
+    private void mergeTempDeptToBusinessTable(String qybh, List<String> auditLogs, int batchSize) {
+        List<VeDeptTemp4849> tempDepts = veDeptTempMapper.selectList(new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh));
+        if (CollectionUtils.isEmpty(tempDepts)) {
+            return;
+        }
+
+        List<VeDept4849> existDepts = veDeptMapper.selectList(new EntityWrapper<VeDept4849>().eq("qybh", qybh));
+        Map<String, VeDept4849> existBhMap = new HashMap<>();
+        if (CollectionUtils.isNotEmpty(existDepts)) {
+            for (VeDept4849 exist : existDepts) {
+                existBhMap.put(exist.getBh(), exist);
+            }
+        }
+
+        List<VeDept4849> insertList = new ArrayList<>();
+        List<VeDept4849> updateList = new ArrayList<>();
+
+        for (VeDeptTemp4849 temp : tempDepts) {
+            VeDept4849 exist = existBhMap.get(temp.getBh());
+            if (exist == null) {
+                insertList.add(buildDeptFromTemp(temp));
+            } else {
+                if (DataCleanUtils.isManualRecord(exist.getDataSource())) {
+                    auditLogs.add("【跳过手工维护部门】部门编号: " + exist.getBh() + " (dataSource=1)");
+                    continue;
+                }
+                VeDept4849 updDept = buildDeptFromTemp(temp);
+                updDept.setId(exist.getId());
+                updateList.add(updDept);
+            }
+        }
+
+        // 按 500 个一批批量合并
+        for (int i = 0; i < insertList.size(); i += batchSize) {
+            List<VeDept4849> batch = insertList.subList(i, Math.min(i + batchSize, insertList.size()));
+            for (VeDept4849 insert : batch) {
+                veDeptMapper.insert(insert);
+            }
+        }
+        for (int i = 0; i < updateList.size(); i += batchSize) {
+            List<VeDept4849> batch = updateList.subList(i, Math.min(i + batchSize, updateList.size()));
+            for (VeDept4849 upd : batch) {
+                veDeptMapper.updateVeDept(upd);
+            }
+        }
+    }
+
+    private VeDept4849 buildDeptFromTemp(VeDeptTemp4849 temp) {
+        VeDept4849 dept = new VeDept4849();
+        dept.setId(temp.getId());
+        dept.setDeptId(temp.getDeptId());
+        dept.setQybh(temp.getQybh());
+        dept.setBh(temp.getBh());
+        dept.setShortName(temp.getShortName());
+        dept.setParentId(temp.getParentId());
+        dept.setDetailAddress(temp.getDetailAddress());
+        dept.setStatus(temp.getStatus());
+        dept.setCreatorId(temp.getCreatorId());
+        dept.setCreateTime(temp.getCreateTime());
+        dept.setUpdateTime(temp.getUpdateTime());
+        dept.setDeptIdPath(temp.getDeptIdPath());
+        dept.setDeptNamePath(temp.getDeptNamePath());
+        dept.setDataSource("2");
+        return dept;
+    }
+
+    private int fetchDeptTotalCountWithRetry(String qybh, Date lastSyncTime, List<String> auditLogs) throws Exception {
+        int maxRetries = syncConfigProperties.getMaxRetryAttempts();
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return mockFetchDeptTotalCount(qybh, lastSyncTime);
+            } catch (Exception e) {
+                auditLogs.add(String.format("【部门网络异常重试】获取总条数第 %d 次失败", attempt));
+                if (attempt == maxRetries) {
+                    throw new RuntimeException("调用部门接口失败，已达到重试上限 " + maxRetries + " 次", e);
+                }
+                Thread.sleep(attempt * 1000L);
+            }
+        }
+        return 0;
+    }
+
+    private List<VeDept4849> fetchDeptPageDataWithRetry(String qybh, Date lastSyncTime, int page, int pageSize, List<String> auditLogs) throws Exception {
+        int maxRetries = syncConfigProperties.getMaxRetryAttempts();
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return mockFetchDeptPageData(qybh, lastSyncTime, page, pageSize);
+            } catch (Exception e) {
+                auditLogs.add(String.format("【部门网络异常重试】获取第 %d 页数据第 %d 次失败", page, attempt));
+                if (attempt == maxRetries) {
+                    throw new RuntimeException("获取部门第 " + page + " 页数据异常，重试放弃", e);
+                }
+                Thread.sleep(attempt * 1000L);
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    private int mockFetchDeptTotalCount(String qybh, Date lastSyncTime) {
+        return 1000;
+    }
+
+    private List<VeDept4849> mockFetchDeptPageData(String qybh, Date lastSyncTime, int page, int pageSize) {
+        List<VeDept4849> list = new ArrayList<>();
+        int count = Math.min(pageSize, 1000 - (page - 1) * pageSize);
+        for (int i = 0; i < count; i++) {
+            VeDept4849 dept = new VeDept4849();
+            dept.setId(IdGenerator.getHexId());
+            dept.setDeptId("100" + i);
+            dept.setQybh(qybh);
+            dept.setBh("DEPT_" + String.format("%04d", (page - 1) * pageSize + i + 1));
+            dept.setShortName("部门_" + i);
+            dept.setParentId("none");
+            dept.setStatus("1");
+            dept.setCreateTime(new Date());
+            dept.setUpdateTime(new Date());
+            list.add(dept);
+        }
+        return list;
     }
 
     // ==================== 删（级联删除子部门）====================
@@ -103,7 +340,6 @@ public class VeDeptBusinessService {
         if (Objects.isNull(exist)) {
             throw new SystemException(DemoExceptionEnum.DEMO_0002, "部门不存在");
         }
-        // 校验父部门是否存在（非根部门）
         validateParentExists(dto.getParentId());
 
         Date nowtime = new Date();
@@ -116,6 +352,7 @@ public class VeDeptBusinessService {
         entity.setParentId(dto.getParentId());
         entity.setDetailAddress(dto.getDetailAddress());
         entity.setStatus(dto.getStatus());
+        entity.setDataSource(exist.getDataSource() != null ? exist.getDataSource() : "1");
         entity.setUpdateTime(nowtime);
 
         buildDeptPath(entity);

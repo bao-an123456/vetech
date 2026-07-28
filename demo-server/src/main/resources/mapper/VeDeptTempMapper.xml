@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeDeptTempMapper">
+
+    <insert id="insertBatch">
+        INSERT INTO ve_bm_4849_temp (
+        id, dept_id, qybh, bh, short_name, parent_id, detail_address,
+        status, creator_id, create_time, update_time, dept_id_path, dept_name_path, data_source
+        ) VALUES
+        <foreach collection="list" item="e" separator=",">
+            (
+            #{e.id}, #{e.deptId}, #{e.qybh}, #{e.bh}, #{e.shortName}, #{e.parentId},
+            #{e.detailAddress}, #{e.status}, #{e.creatorId}, #{e.createTime},
+            #{e.updateTime}, #{e.deptIdPath}, #{e.deptNamePath}, #{e.dataSource}
+            )
+        </foreach>
+    </insert>
+
+    <select id="selectMaxUpdateTime" resultType="java.util.Date">
+        SELECT MAX(update_time) FROM ve_bm_4849_temp WHERE qybh = #{qybh}
+    </select>
+
+    <delete id="clearTempTable">
+        DELETE FROM ve_bm_4849_temp WHERE qybh = #{qybh}
+    </delete>
+
+</mapper>

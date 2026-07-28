@@ -22,6 +22,7 @@
         version_no,
         creator_id,
         create_time,
+        data_source,
         update_time
         )
         VALUES
@@ -44,6 +45,7 @@
             #{e.versionNo},
             #{e.creatorId},
             #{e.createTime},
+            #{e.dataSource},
             #{e.updateTime}
             )
         </foreach>
@@ -68,6 +70,7 @@
         account_status = #{accountStatus},
         version_no = #{versionNo},
         creator_id = #{creatorId},
+        data_source = #{dataSource},
         update_time = #{updateTime}
         WHERE id = #{id}
     </update>

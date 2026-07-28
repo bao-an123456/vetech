@@ -1,0 +1,109 @@
+-- ============================================================
+-- 详细设计规范数据库建表 SQL 脚本（针对阶段二及50万同步引擎优化版）
+-- 修正内容：
+-- 1. 补全 ve_yg_4849 与 ve_bm_4849 表缺失的 data_source (1手工/2同步) 字段
+-- 2. 补全 50万/5万 数据同步引擎依赖的临时表 ve_yg_4849_temp 与 ve_bm_4849_temp
+-- 3. 补充增量点位(qybh, update_time)、级联删除(parent_id)及熔断统计索引
+-- ============================================================
+
+-- 1. 员工正式表
+CREATE TABLE IF NOT EXISTS `ve_yg_4849` (
+    `id`              VARCHAR(32)  NOT NULL COMMENT 'ID主键',
+    `qybh`            VARCHAR(32)  NOT NULL COMMENT '企业编号',
+    `gh`              VARCHAR(32)  NOT NULL COMMENT '工号',
+    `account`         VARCHAR(64)  DEFAULT NULL COMMENT '账号',
+    `password`        VARCHAR(256) DEFAULT NULL COMMENT '密码',
+    `name`            VARCHAR(64)  DEFAULT NULL COMMENT '姓名',
+    `english_surname` VARCHAR(64)  DEFAULT NULL COMMENT '英文姓',
+    `english_name`    VARCHAR(64)  DEFAULT NULL COMMENT '英文名',
+    `phone`           VARCHAR(32)  DEFAULT NULL COMMENT '电话号码(洗去+86)',
+    `email`           VARCHAR(128) DEFAULT NULL COMMENT '联系邮箱',
+    `address`         VARCHAR(256) DEFAULT NULL COMMENT '联系地址',
+    `gender`          VARCHAR(2)   DEFAULT NULL COMMENT '性别(M男 F女)',
+    `birthday`        DATE         DEFAULT NULL COMMENT '生日',
+    `account_status`  VARCHAR(2)   DEFAULT '1' COMMENT '账号开通状态(0禁用/离职, 1正常)',
+    `version_no`      INT          DEFAULT 1 COMMENT '版本号',
+    `creator_id`      VARCHAR(32)  DEFAULT NULL COMMENT '创建人',
+    `data_source`     CHAR(1)      NOT NULL DEFAULT '1' COMMENT '数据来源(1手工维护, 2数据同步)',
+    `create_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间(用于增量点位)',
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_ve_yg_4849_qybh_gh` (`qybh`, `gh`) USING BTREE,
+    KEY `idx_ve_yg_4849_update` (`qybh`, `update_time`) USING BTREE,
+    KEY `idx_ve_yg_4849_status` (`qybh`, `account_status`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='员工表';
+
+
+-- 2. 员工临时表 (用于50万员工批处理缓冲与清洗)
+CREATE TABLE IF NOT EXISTS `ve_yg_4849_temp` LIKE `ve_yg_4849`;
+
+
+-- 3. 员工任职/岗位表
+CREATE TABLE IF NOT EXISTS `ve_ygrz_4849` (
+    `id`            VARCHAR(32)  NOT NULL COMMENT 'ID主键',
+    `qybh`          VARCHAR(20)  NOT NULL DEFAULT 'VETECH' COMMENT '企业编号',
+    `dept_id`       VARCHAR(60)  NOT NULL COMMENT '部门id，部门表的dept_id',
+    `ygid`          VARCHAR(32)  NOT NULL COMMENT '员工ID号，员工表中的ID',
+    `job_level`     VARCHAR(20)  DEFAULT NULL COMMENT '职级，1、2、3、4、5、6',
+    `supervisor_id` VARCHAR(32)  DEFAULT NULL COMMENT '直接上级主管，员工表中的ID',
+    `hire_date`     DATE         DEFAULT NULL COMMENT '入职时间，2010-10-10',
+    `position_code` VARCHAR(32)  DEFAULT NULL COMMENT '岗位编号，A',
+    `position_name` VARCHAR(60)  DEFAULT NULL COMMENT '岗位名称，Java开发',
+    `status`        CHAR(1)      NOT NULL DEFAULT '1' COMMENT '状态，0停用 1启用',
+    `creator_id`    VARCHAR(32)  NOT NULL COMMENT '创建人，ID来源员工表',
+    `create_time`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `update_time`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间',
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_ve_ygrz_4849_qybh_bmid_ygid` (`qybh`, `dept_id`, `ygid`) USING BTREE,
+    KEY `idx_ve_ygrz_4849_ygid` (`ygid`) USING BTREE,
+    KEY `idx_ve_ygrz_4849_supervisor_id` (`supervisor_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='员工任职表';
+
+
+-- 4. 部门正式表
+CREATE TABLE IF NOT EXISTS `ve_bm_4849` (
+    `id`             VARCHAR(32)   NOT NULL COMMENT 'ID主键',
+    `dept_id`        VARCHAR(60)   NOT NULL COMMENT '部门id',
+    `qybh`           VARCHAR(20)   NOT NULL DEFAULT 'VETECH' COMMENT '企业编号',
+    `bh`             VARCHAR(32)   NOT NULL COMMENT '部门编号，同一企业下的部门编号要唯一',
+    `short_name`     VARCHAR(60)   NOT NULL COMMENT '简称',
+    `parent_id`      VARCHAR(32)   DEFAULT 'none' COMMENT '上级部门ID，none表示无上级部门',
+    `detail_address` VARCHAR(200)  DEFAULT NULL COMMENT '详细地址',
+    `status`         CHAR(1)       NOT NULL DEFAULT '1' COMMENT '状态，0无效1有效',
+    `creator_id`     VARCHAR(32)   NOT NULL COMMENT '创建人，ID来源员工表',
+    `data_source`    CHAR(1)       NOT NULL DEFAULT '1' COMMENT '数据来源(1手工维护, 2数据同步)',
+    `create_time`    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `update_time`    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间',
+    `dept_id_path`   VARCHAR(500)  DEFAULT NULL COMMENT '部门上级全路径',
+    `dept_name_path` VARCHAR(4000) DEFAULT NULL COMMENT '部门名称全路径',
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_ve_bm_4849_qybh_bmid` (`qybh`, `dept_id`) USING BTREE,
+    UNIQUE KEY `uk_ve_bm_4849_qybh_bh` (`qybh`, `bh`) USING BTREE,
+    KEY `idx_ve_bm_4849_parent_id` (`parent_id`) USING BTREE,
+    KEY `idx_ve_bm_4849_update` (`qybh`, `update_time`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='员工部门表';
+
+
+-- 5. 部门临时表 (用于5万部门批处理缓冲)
+CREATE TABLE IF NOT EXISTS `ve_bm_4849_temp` LIKE `ve_bm_4849`;
+
+
+-- 6. 导入导出任务表
+CREATE TABLE IF NOT EXISTS `t_drdc_rw_4849` (
+    `id`           VARCHAR(32)  NOT NULL COMMENT 'ID主键',
+    `qybh`         VARCHAR(20)  NOT NULL DEFAULT 'VETECH' COMMENT '企业编号',
+    `task_type`    CHAR(1)      NOT NULL COMMENT '任务类型，1导入，2 导出',
+    `status`       CHAR(1)      NOT NULL COMMENT '状态，0为未执行,1正在执行，2终止，3完成，4失败',
+    `task_name`    VARCHAR(100) NOT NULL COMMENT '任务名称，如：员工导入 员工导出',
+    `record_count` INT          DEFAULT NULL COMMENT '导入导出的记录数',
+    `start_time`   DATETIME(3)  DEFAULT NULL COMMENT '开始时间',
+    `end_time`     DATETIME(3)  DEFAULT NULL COMMENT '结束时间',
+    `cost_time`    INT          DEFAULT NULL COMMENT '执行耗时，毫秒',
+    `creator_id`   VARCHAR(32)  NOT NULL COMMENT '创建人，ID来源员工表',
+    `create_time`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='导入导出任务表';

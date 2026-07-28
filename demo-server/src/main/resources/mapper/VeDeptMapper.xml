@@ -15,6 +15,7 @@
         status = #{status},
         dept_id_path = #{deptIdPath},
         dept_name_path = #{deptNamePath},
+        data_source = #{dataSource},
         update_time = #{updateTime}
         WHERE id = #{id}
     </update>

@@ -71,6 +71,9 @@ public class VeEmp4849 extends BaseEntity {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date createTime;
 
+    @ApiModelProperty(value = "数据来源，1手工维护，2数据同步", dataType = "string")
+    private String dataSource;
+
     @ApiModelProperty(value = "修改时间，2020-01-01 12:12:12", dataType = "date")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date updateTime;

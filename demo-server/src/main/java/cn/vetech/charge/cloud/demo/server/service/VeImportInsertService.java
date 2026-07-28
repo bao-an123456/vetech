@@ -169,6 +169,7 @@ public class VeImportInsertService {
         dept.setDetailAddress(vo.getDetailAddress());
         dept.setStatus("1");
         dept.setCreatorId(user.getYgid());
+        dept.setDataSource("1");
         Date now = new Date();
         dept.setCreateTime(now);
         dept.setUpdateTime(now);
@@ -324,6 +325,7 @@ public class VeImportInsertService {
         emp.setAccountStatus("1");
         emp.setVersionNo(1);
         emp.setCreatorId(user.getYgid());
+        emp.setDataSource("1");
         Date now = new Date();
         emp.setCreateTime(now);
         emp.setUpdateTime(now);
