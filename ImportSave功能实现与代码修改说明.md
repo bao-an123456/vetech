@@ -1,129 +1,67 @@
-# ImportSave（覆盖保存导入与进度查询）代码变动说明文档
+# ImportSave（覆盖保存导入与自动弹出进度框面板）说明文档
 
-本文档汇总记录了为实现 **ImportSave（覆盖保存/存量更新与增量新增）** 及 **异步进度条反馈** 功能所新增与修改的所有代码文件及具体实现逻辑。
+本文档汇总记录了为实现 **ImportSave（覆盖保存/存量更新与增量新增）** 及 **自动弹出进度框（Progress Dialog Modal）** 功能所新增与修改的所有代码文件及具体实现逻辑。
 
 ---
 
-## 1. 架构逻辑设计要点
+## 1. 智能自动弹出进度框设计
 
-1. **预热与内存路由（替代 Redis 降低宕机风险）**：
+1. **自动弹出进程框（无需手动调 Progress 接口）**：
+   - 提供了全新的交互式可视化面板 `import_progress_ui.html`。
+   - 当用户在前端点击 **“一键开启覆盖保存导入”** 时，前端 UI **自动弹出极具现代感（暗黑磨砂玻璃风）的进程框 Modal**。
+   - 进程框自动绑定请求返回的 `taskId`，内部自动进行高频平滑进度追踪，无需人工干预或手动请求接口。
+
+2. **预热与内存路由（替代 Redis 降低宕机风险）**：
    - 在解析 Excel 前，根据 `QYBH` 与 Excel 中的工号/部门编号列表，一次性检索数据库索引关系 `(ID + QYBH + GH/BH)` 加载至内存黑板。
    - 匹配存在的记录 ➔ 赋予原数据库主键 `ID`，打上 `UPDATE` 标记放入待更新队列。
    - 未匹配的新记录 ➔ 生成新 `ID`，打上 `INSERT` 标记放入待新增队列。
-2. **分批落库与防 OOM 清空**：
+
+3. **分批落库与防 OOM 清空**：
    - 待更新或待新增队列满足 `BATCH_SIZE = 50` 时，分别执行批量插入 `insertBatch` 或批量更新 `updateBatch`。
    - 每次批量落库完成后，强制调用 `list.clear()` 释放内存。
-3. **异步解耦与前端百分比进度条**：
-   - 后端接口接收文件后在 1 秒内创建任务并生成 `taskId` 立即响应前端。
-   - 后台通过异步线程跑数据导入，每完成一批落库实时在 `t_drdc_rw_4849` 表中更新已完成记录数。
-   - 前端通过进度查询接口带上 `taskId` 轮询，展示 0% ~ 100% 的进度条。
 
 ---
 
-## 2. 代码变动清单汇总
+## 2. 界面与代码变动清单汇总
 
-### 模块一：`demo-fccapi`（DTO 实体与 API 接口定义）
+### 模块一：`前端智能自动弹出进度框 UI` [新增]
 
-#### 1. `VeEmpImportSaveRequest.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeEmpImportSaveRequest.java`
-- **功能**：员工覆盖保存导入请求参数（包含 `fileUrl`）。
-
-#### 2. `VeEmpImportSaveResponse.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeEmpImportSaveResponse.java`
-- **功能**：员工覆盖保存导入响应参数（包含异步 `taskId` 与提示 `message`）。
-
-#### 3. `VeEmpImportSaveFccApiService.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeEmpImportSaveFccApiService.java`
-- **功能**：员工覆盖保存导入 OpenApi 接口契约（URL: `/fccapi/DEMO_B2G_ImportSaveVeEmp`）。
-
-#### 4. `VeDeptImportSaveRequest.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeDeptImportSaveRequest.java`
-- **功能**：部门覆盖保存导入请求参数。
-
-#### 5. `VeDeptImportSaveResponse.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeDeptImportSaveResponse.java`
-- **功能**：部门覆盖保存导入响应参数。
-
-#### 6. `VeDeptImportSaveFccApiService.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeDeptImportSaveFccApiService.java`
-- **功能**：部门覆盖保存导入 OpenApi 接口契约（URL: `/fccapi/DEMO_B2G_ImportSaveVeDept`）。
-
-#### 7. `VeImportProgressRequest.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeImportProgressRequest.java`
-- **功能**：导入任务进度查询请求参数（包含 `taskId`）。
-
-#### 8. `VeImportProgressResponse.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeImportProgressResponse.java`
-- **功能**：导入任务进度查询响应参数（包含 `status`, `totalCount`, `processedCount`, `percent`, `costTime`）。
-
-#### 9. `VeImportProgressFccApiService.java` [新增]
-- **路径**：`demo-fccapi/src/main/java/cn/vetech/charge/cloud/demo/fccapi/importsave/VeImportProgressFccApiService.java`
-- **功能**：异步导入进度查询 OpenApi 接口契约（URL: `/fccapi/DEMO_B2G_QueryImportProgress`）。
+#### 1. `import_progress_ui.html`
+- **路径**：`d:\Desktop\javademo\import_progress_ui.html` 及 `demo-rest/src/main/resources/static/import_progress_ui.html`
+- **特点**：
+  - 支持员工与部门标签页切换。
+  - **自动弹出进程框**：包含 0%~100% 渐变 Glow 进度条、实时条数 `2500 / 5000` 统计、耗时毫秒数与自动完成打卡。
 
 ---
 
-### 模块二：`demo-server`（核心业务引擎与 Mapper）
+### 模块二：`demo-fccapi`（DTO 实体与 API 接口定义）
 
-#### 1. `VeImportSaveService.java` [新增]
-- **路径**：`demo-server/src/main/java/cn/vetech/charge/cloud/demo/server/service/VeImportSaveService.java`
-- **核心逻辑**：
-  - `importSaveEmpAsync`：员工异步 Save 引擎，执行索引预热、路由判定、分批插入/更新、进度累加、`clear()` 防 OOM。
-  - `importSaveDeptAsync`：部门异步 Save 引擎。
-  - `getTaskProgress`：进度查询，计算百分比（完成时固定返回 100%）。
-
-#### 2. `VeEmpMapper.java` / `VeEmpMapper.xml` [修改]
-- **路径**：
-  - `demo-server/src/main/java/cn/vetech/charge/cloud/demo/server/mapper/VeEmpMapper.java`
-  - `demo-server/src/main/resources/mapper/VeEmpMapper.xml`
-- **修改点**：追加 `updateBatch` 批量更新员工方法与 SQL 映射。
-
-#### 3. `VePositionMapper.java` / `VePositionMapper.xml` [修改]
-- **路径**：
-  - `demo-server/src/main/java/cn/vetech/charge/cloud/demo/server/mapper/VePositionMapper.java`
-  - `demo-server/src/main/resources/mapper/VePositionMapper.xml`
-- **修改点**：追加 `updateBatch` 批量更新员工任职履历方法与 SQL 映射。
-
-#### 4. `VeDeptMapper.java` / `VeDeptMapper.xml` [修改]
-- **路径**：
-  - `demo-server/src/main/java/cn/vetech/charge/cloud/demo/server/mapper/VeDeptMapper.java`
-  - `demo-server/src/main/resources/mapper/VeDeptMapper.xml`
-- **修改点**：追加 `insertBatch` 批量插入部门与 `updateBatch` 批量更新部门方法及 SQL 映射。
+1. **`VeEmpImportSaveRequest.java` / `VeEmpImportSaveResponse.java` / `VeEmpImportSaveFccApiService.java`**：员工覆盖保存导入接口。
+2. **`VeDeptImportSaveRequest.java` / `VeDeptImportSaveResponse.java` / `VeDeptImportSaveFccApiService.java`**：部门覆盖保存导入接口。
+3. **`VeImportProgressRequest.java` / `VeImportProgressResponse.java` / `VeImportProgressFccApiService.java`**：导入任务进度自动查询接口。
 
 ---
 
-### 模块三：`demo-rest`（REST Controller 控制器实现）
+### 模块三：`demo-server`（核心业务引擎与 Mapper）
 
-#### 1. `VeEmpImportSaveImplFccService.java` [新增]
-- **路径**：`demo-rest/src/main/java/cn/vetech/charge/cloud/demo/fccapi/veimport/VeEmpImportSaveImplFccService.java`
-- **功能**：接收员工 Save 导入请求，立即返回 `taskId`。
-
-#### 2. `VeDeptImportSaveImplFccService.java` [新增]
-- **路径**：`demo-rest/src/main/java/cn/vetech/charge/cloud/demo/fccapi/veimport/VeDeptImportSaveImplFccService.java`
-- **功能**：接收部门 Save 导入请求，立即返回 `taskId`。
-
-#### 3. `VeImportProgressImplFccService.java` [新增]
-- **路径**：`demo-rest/src/main/java/cn/vetech/charge/cloud/demo/fccapi/veimport/VeImportProgressImplFccService.java`
-- **功能**：查询导入任务实时进度。
+1. **`VeImportSaveService.java`**：覆盖保存导入服务引擎（预热索引 + 内存路由 + 分批 `clear()` 防 OOM + 实时进度更新）。
+2. **`VeEmpMapper.java` / `VeEmpMapper.xml`**：`updateBatch` 批量更新员工。
+3. **`VePositionMapper.java` / `VePositionMapper.xml`**：`updateBatch` 批量更新员工岗位履历。
+4. **`VeDeptMapper.java` / `VeDeptMapper.xml`**：`insertBatch` 批量新增部门与 `updateBatch` 批量更新部门。
 
 ---
 
-## 3. 接口调用说明
+### 模块四：`demo-rest`（REST Controller 控制器实现）
 
-1. **发起员工 Save 导入**：
-   - **请求 URL**：`/fccapi/DEMO_B2G_ImportSaveVeEmp`
-   - **响应**：`{"taskId": "a1b2c3d4...", "message": "文件已接收..."}`
-2. **前端轮询进度条**：
-   - **请求 URL**：`/fccapi/DEMO_B2G_QueryImportProgress`
-   - **请求参数**：`{"taskId": "a1b2c3d4..."}`
-   - **响应示例**：
-     ```json
-     {
-       "taskId": "a1b2c3d4...",
-       "taskName": "员工覆盖保存(ImportSave)",
-       "status": "1",
-       "totalCount": 5000,
-       "processedCount": 2500,
-       "percent": 50,
-       "costTime": 1200
-     }
-     ```
+1. **`VeEmpImportSaveImplFccService.java`**：`/fccapi/DEMO_B2G_ImportSaveVeEmp`
+2. **`VeDeptImportSaveImplFccService.java`**：`/fccapi/DEMO_B2G_ImportSaveVeDept`
+3. **`VeImportProgressImplFccService.java`**：`/fccapi/DEMO_B2G_QueryImportProgress`
+
+---
+
+## 3. 使用方法
+
+直接双击打开本地 [import_progress_ui.html](file:///d:/Desktop/javademo/import_progress_ui.html) 或启动项目后访问 `http://localhost:8080/import_progress_ui.html`：
+1. 选择“员工数据覆盖保存”或“部门数据覆盖保存”。
+2. 点击 **“一键开启覆盖保存导入”**。
+3. **进程框将自动弹窗**，动态展示实时百分比进度条与完成状态，无需手动调用任何接口！
