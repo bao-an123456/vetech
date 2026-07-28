@@ -21,6 +21,11 @@ public interface VeEmpMapper extends BaseMapper<VeEmp4849> {
     void insertBatch(@Param("list") List<VeEmp4849> list);
 
     /**
+     * 批量更新
+     */
+    void updateBatch(@Param("list") List<VeEmp4849> list);
+
+    /**
      * 更新员工信息
      */
     void updateVeEmp(VeEmp4849 entity);

@@ -39,6 +39,25 @@
         </foreach>
     </insert>
 
+    <!-- 批量更新任职信息 -->
+    <update id="updateBatch">
+        <foreach collection="list" item="e" separator=";">
+            UPDATE ve_ygrz_4849
+            SET
+            qybh = #{e.qybh},
+            dept_id = #{e.deptId},
+            ygid = #{e.ygid},
+            job_level = #{e.jobLevel},
+            supervisor_id = #{e.supervisorId},
+            hire_date = #{e.hireDate},
+            position_code = #{e.positionCode},
+            position_name = #{e.positionName},
+            status = #{e.status},
+            update_time = #{e.updateTime}
+            WHERE id = #{e.id}
+        </foreach>
+    </update>
+
     <!-- 更新（不碰 creator_id / create_time） -->
     <update id="updateVePosition">
         UPDATE ve_ygrz_4849

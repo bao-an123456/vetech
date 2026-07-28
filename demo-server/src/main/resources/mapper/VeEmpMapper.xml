@@ -51,6 +51,28 @@
         </foreach>
     </insert>
 
+    <!-- 批量更新员工信息 -->
+    <update id="updateBatch">
+        <foreach collection="list" item="e" separator=";">
+            UPDATE ve_yg_4849
+            SET
+            qybh = #{e.qybh},
+            gh = #{e.gh},
+            name = #{e.name},
+            english_surname = #{e.englishSurname},
+            english_name = #{e.englishName},
+            phone = #{e.phone},
+            email = #{e.email},
+            address = #{e.address},
+            gender = #{e.gender},
+            birthday = #{e.birthday},
+            account_status = #{e.accountStatus},
+            version_no = #{e.versionNo},
+            update_time = #{e.updateTime}
+            WHERE id = #{e.id}
+        </foreach>
+    </update>
+
     <!-- 更新员工信息（支持全字段更新，禁用/启用/密码更新均可复用） -->
     <update id="updateVeEmp">
         UPDATE ve_yg_4849

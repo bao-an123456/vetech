@@ -2,6 +2,40 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.vetech.charge.cloud.demo.server.mapper.VeDeptMapper">
 
+    <!-- 批量新增部门 -->
+    <insert id="insertBatch">
+        INSERT INTO ve_bm_4849 (
+        id, dept_id, qybh, bh, short_name, parent_id, detail_address,
+        status, creator_id, create_time, update_time, dept_id_path, dept_name_path, data_source
+        ) VALUES
+        <foreach collection="list" item="e" separator=",">
+            (
+            #{e.id}, #{e.deptId}, #{e.qybh}, #{e.bh}, #{e.shortName}, #{e.parentId}, #{e.detailAddress},
+            #{e.status}, #{e.creatorId}, #{e.createTime}, #{e.updateTime}, #{e.deptIdPath}, #{e.deptNamePath}, #{e.dataSource}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 批量更新部门信息 -->
+    <update id="updateBatch">
+        <foreach collection="list" item="e" separator=";">
+            UPDATE ve_bm_4849
+            SET
+            dept_id = #{e.deptId},
+            qybh = #{e.qybh},
+            bh = #{e.bh},
+            short_name = #{e.shortName},
+            parent_id = #{e.parentId},
+            detail_address = #{e.detailAddress},
+            status = #{e.status},
+            dept_id_path = #{e.deptIdPath},
+            dept_name_path = #{e.deptNamePath},
+            data_source = #{e.dataSource},
+            update_time = #{e.updateTime}
+            WHERE id = #{e.id}
+        </foreach>
+    </update>
+
     <!-- 全字段更新 -->
     <update id="updateVeDept">
         UPDATE ve_bm_4849

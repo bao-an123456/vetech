@@ -17,6 +17,11 @@ public interface VePositionMapper extends BaseMapper<VePosition4849> {
     void insertBatch(@Param("list") List<VePosition4849> list);
 
     /**
+     * 批量更新
+     */
+    void updateBatch(@Param("list") List<VePosition4849> list);
+
+    /**
      * 更新任职信息
      */
     void updateVePosition(VePosition4849 entity);

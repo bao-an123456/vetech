@@ -33,6 +33,16 @@ public interface VeDeptMapper extends BaseMapper<VeDept4849> {
     void updateVeDept(VeDept4849 entity);
 
     /**
+     * 批量新增部门信息
+     */
+    void insertBatch(@Param("list") List<VeDept4849> list);
+
+    /**
+     * 批量更新部门信息
+     */
+    void updateBatch(@Param("list") List<VeDept4849> list);
+
+    /**
      * 根据上级部门ID查询所有直接子部门
      */
     List<VeDept4849> selectByParentId(@Param("parentId") String parentId);
