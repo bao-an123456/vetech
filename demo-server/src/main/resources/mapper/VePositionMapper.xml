@@ -39,22 +39,64 @@
         </foreach>
     </insert>
 
-    <!-- 批量更新任职信息 -->
+    <!-- 批量更新任职信息（基于 CASE WHEN 单语句，无 CASE END 语法隐患） -->
     <update id="updateBatch">
-        <foreach collection="list" item="e" separator=";">
-            UPDATE ve_ygrz_4849
-            SET
-            qybh = #{e.qybh},
-            dept_id = #{e.deptId},
-            ygid = #{e.ygid},
-            job_level = #{e.jobLevel},
-            supervisor_id = #{e.supervisorId},
-            hire_date = #{e.hireDate},
-            position_code = #{e.positionCode},
-            position_name = #{e.positionName},
-            status = #{e.status},
-            update_time = #{e.updateTime}
-            WHERE id = #{e.id}
+        UPDATE ve_ygrz_4849
+        <trim prefix="SET" suffixOverrides=",">
+            <trim prefix="qybh = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.qybh}
+                </foreach>
+            </trim>
+            <trim prefix="dept_id = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.deptId}
+                </foreach>
+            </trim>
+            <trim prefix="ygid = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.ygid}
+                </foreach>
+            </trim>
+            <trim prefix="job_level = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.jobLevel}
+                </foreach>
+            </trim>
+            <trim prefix="supervisor_id = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.supervisorId}
+                </foreach>
+            </trim>
+            <trim prefix="hire_date = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.hireDate}
+                </foreach>
+            </trim>
+            <trim prefix="position_code = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.positionCode}
+                </foreach>
+            </trim>
+            <trim prefix="position_name = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.positionName}
+                </foreach>
+            </trim>
+            <trim prefix="status = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.status}
+                </foreach>
+            </trim>
+            <trim prefix="update_time = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.updateTime}
+                </foreach>
+            </trim>
+        </trim>
+        WHERE id IN
+        <foreach collection="list" item="e" open="(" separator="," close=")">
+            #{e.id}
         </foreach>
     </update>
 

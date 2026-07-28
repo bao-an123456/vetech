@@ -2,7 +2,6 @@ package cn.vetech.charge.cloud.demo.server.service;
 
 import cn.afterturn.easypoi.excel.ExcelImportUtil;
 import cn.afterturn.easypoi.excel.entity.ImportParams;
-import cn.vetech.charge.cloud.demo.fccapi.importsave.VeImportProgressResponse;
 import cn.vetech.charge.cloud.demo.server.dao.VeImportInsertDaoServiceImpl;
 import cn.vetech.charge.cloud.demo.server.entity.VeDept4849;
 import cn.vetech.charge.cloud.demo.server.entity.VeEmp4849;
@@ -193,7 +192,6 @@ public class VeImportSaveService {
 
                         VePosition4849 oldPos = existPosMap.get(oldEmp.getId());
                         VePosition4849 pos = new VePosition4849();
-                        pos.setId(oldPos != null ? oldPos.getId() : IdGenerator.getHexId());
                         pos.setQybh(qybh);
                         pos.setYgid(oldEmp.getId());
                         if (StringUtils.isNotEmpty(vo.getDeptBh())) {
@@ -201,9 +199,19 @@ public class VeImportSaveService {
                         }
                         pos.setPositionCode(vo.getPositionCode());
                         pos.setPositionName(vo.getPositionName());
+                        pos.setJobLevel(vo.getJobLevel());
                         pos.setStatus("1");
                         pos.setUpdateTime(now);
-                        updatePosList.add(pos);
+
+                        if (oldPos != null) {
+                            pos.setId(oldPos.getId());
+                            updatePosList.add(pos);
+                        } else {
+                            pos.setId(IdGenerator.getHexId());
+                            pos.setCreatorId(openApiUserVO.getYgid());
+                            pos.setCreateTime(now);
+                            insertPosList.add(pos);
+                        }
                     } else {
                         // 新员工 ➔ INSERT
                         VeEmp4849 emp = new VeEmp4849();
@@ -235,6 +243,7 @@ public class VeImportSaveService {
                         }
                         pos.setPositionCode(vo.getPositionCode());
                         pos.setPositionName(vo.getPositionName());
+                        pos.setJobLevel(vo.getJobLevel());
                         pos.setHireDate(now);
                         pos.setStatus("1");
                         pos.setCreatorId(openApiUserVO.getYgid());
@@ -246,32 +255,42 @@ public class VeImportSaveService {
 
                     // 阶段 3: 分批落库与防 OOM 清空 (满 writeBatchSize 500 写入并 clear)
                     if (insertEmpList.size() >= writeBatchSize) {
-                        veEmpMapper.insertBatch(insertEmpList);
-                        vePositionMapper.insertBatch(insertPosList);
-                        insertEmpList.clear();
-                        insertPosList.clear();
-                        updateProgress(task, processedCount);
+                        if (CollectionUtils.isNotEmpty(insertEmpList)) {
+                            veEmpMapper.insertBatch(insertEmpList);
+                            insertEmpList.clear();
+                        }
+                        if (CollectionUtils.isNotEmpty(insertPosList)) {
+                            vePositionMapper.insertBatch(insertPosList);
+                            insertPosList.clear();
+                        }
                     }
                     if (updateEmpList.size() >= writeBatchSize) {
-                        veEmpMapper.updateBatch(updateEmpList);
-                        vePositionMapper.updateBatch(updatePosList);
-                        updateEmpList.clear();
-                        updatePosList.clear();
-                        updateProgress(task, processedCount);
+                        if (CollectionUtils.isNotEmpty(updateEmpList)) {
+                            veEmpMapper.updateBatch(updateEmpList);
+                            updateEmpList.clear();
+                        }
+                        if (CollectionUtils.isNotEmpty(updatePosList)) {
+                            vePositionMapper.updateBatch(updatePosList);
+                            updatePosList.clear();
+                        }
                     }
                 }
 
                 // 刷新尾数队列
-                if (!insertEmpList.isEmpty()) {
+                if (CollectionUtils.isNotEmpty(insertEmpList)) {
                     veEmpMapper.insertBatch(insertEmpList);
-                    vePositionMapper.insertBatch(insertPosList);
                     insertEmpList.clear();
+                }
+                if (CollectionUtils.isNotEmpty(insertPosList)) {
+                    vePositionMapper.insertBatch(insertPosList);
                     insertPosList.clear();
                 }
-                if (!updateEmpList.isEmpty()) {
+                if (CollectionUtils.isNotEmpty(updateEmpList)) {
                     veEmpMapper.updateBatch(updateEmpList);
-                    vePositionMapper.updateBatch(updatePosList);
                     updateEmpList.clear();
+                }
+                if (CollectionUtils.isNotEmpty(updatePosList)) {
+                    vePositionMapper.updateBatch(updatePosList);
                     updatePosList.clear();
                 }
 
@@ -371,22 +390,24 @@ public class VeImportSaveService {
                     processedCount++;
 
                     if (insertList.size() >= writeBatchSize) {
-                        veDeptMapper.insertBatch(insertList);
-                        insertList.clear();
-                        updateProgress(task, processedCount);
+                        if (CollectionUtils.isNotEmpty(insertList)) {
+                            veDeptMapper.insertBatch(insertList);
+                            insertList.clear();
+                        }
                     }
                     if (updateList.size() >= writeBatchSize) {
-                        veDeptMapper.updateBatch(updateList);
-                        updateList.clear();
-                        updateProgress(task, processedCount);
+                        if (CollectionUtils.isNotEmpty(updateList)) {
+                            veDeptMapper.updateBatch(updateList);
+                            updateList.clear();
+                        }
                     }
                 }
 
-                if (!insertList.isEmpty()) {
+                if (CollectionUtils.isNotEmpty(insertList)) {
                     veDeptMapper.insertBatch(insertList);
                     insertList.clear();
                 }
-                if (!updateList.isEmpty()) {
+                if (CollectionUtils.isNotEmpty(updateList)) {
                     veDeptMapper.updateBatch(updateList);
                     updateList.clear();
                 }
@@ -401,58 +422,7 @@ public class VeImportSaveService {
         return taskId;
     }
 
-    // ==================== 进度查询服务 (给前端百分比进度条) ====================
-
-    public VeImportProgressResponse getTaskProgress(String taskId) {
-        VeImportProgressResponse response = new VeImportProgressResponse();
-        response.setTaskId(taskId);
-        if (StringUtils.isBlank(taskId)) {
-            response.setStatus("0");
-            response.setPercent(0);
-            return response;
-        }
-
-        VeImport4849 task = veImportInsertDaoService.getById(taskId);
-        if (task == null) {
-            response.setStatus("0");
-            response.setPercent(0);
-            return response;
-        }
-
-        response.setTaskName(task.getTaskName());
-        response.setStatus(task.getStatus());
-        int total = task.getRecordCount() != null ? task.getRecordCount() : 0;
-        response.setTotalCount(total);
-        response.setCostTime(task.getCostTime() != null ? task.getCostTime() : 0);
-
-        if ("3".equals(task.getStatus())) {
-            // 已完成
-            response.setProcessedCount(total);
-            response.setPercent(100);
-        } else if ("4".equals(task.getStatus())) {
-            // 失败
-            response.setProcessedCount(0);
-            response.setPercent(0);
-        } else {
-            // 正在执行
-            int processed = task.getRecordCount() != null ? task.getRecordCount() : 0;
-            response.setProcessedCount(processed);
-            if (total > 0) {
-                int percent = (int) Math.min(99, Math.round(((double) processed / total) * 100));
-                response.setPercent(percent);
-            } else {
-                response.setPercent(0);
-            }
-        }
-        return response;
-    }
-
     // ==================== 私有辅助方法 ====================
-
-    private void updateProgress(VeImport4849 task, int processedCount) {
-        task.setRecordCount(processedCount);
-        veImportInsertDaoService.update(task);
-    }
 
     private void finishTask(VeImport4849 task, String status, int processedCount) {
         task.setStatus(status);

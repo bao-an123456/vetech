@@ -16,23 +16,69 @@
         </foreach>
     </insert>
 
-    <!-- 批量更新部门信息 -->
+    <!-- 批量更新部门信息（基于 CASE WHEN 单语句，无 CASE END 语法隐患） -->
     <update id="updateBatch">
-        <foreach collection="list" item="e" separator=";">
-            UPDATE ve_bm_4849
-            SET
-            dept_id = #{e.deptId},
-            qybh = #{e.qybh},
-            bh = #{e.bh},
-            short_name = #{e.shortName},
-            parent_id = #{e.parentId},
-            detail_address = #{e.detailAddress},
-            status = #{e.status},
-            dept_id_path = #{e.deptIdPath},
-            dept_name_path = #{e.deptNamePath},
-            data_source = #{e.dataSource},
-            update_time = #{e.updateTime}
-            WHERE id = #{e.id}
+        UPDATE ve_bm_4849
+        <trim prefix="SET" suffixOverrides=",">
+            <trim prefix="dept_id = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.deptId}
+                </foreach>
+            </trim>
+            <trim prefix="qybh = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.qybh}
+                </foreach>
+            </trim>
+            <trim prefix="bh = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.bh}
+                </foreach>
+            </trim>
+            <trim prefix="short_name = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.shortName}
+                </foreach>
+            </trim>
+            <trim prefix="parent_id = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.parentId}
+                </foreach>
+            </trim>
+            <trim prefix="detail_address = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.detailAddress}
+                </foreach>
+            </trim>
+            <trim prefix="status = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.status}
+                </foreach>
+            </trim>
+            <trim prefix="dept_id_path = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.deptIdPath}
+                </foreach>
+            </trim>
+            <trim prefix="dept_name_path = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.deptNamePath}
+                </foreach>
+            </trim>
+            <trim prefix="data_source = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.dataSource}
+                </foreach>
+            </trim>
+            <trim prefix="update_time = CASE" suffix="END,">
+                <foreach collection="list" item="e">
+                    WHEN id = #{e.id} THEN #{e.updateTime}
+                </foreach>
+            </trim>
+        </trim>
+        WHERE id IN
+        <foreach collection="list" item="e" open="(" separator="," close=")">
+            #{e.id}
         </foreach>
     </update>
 

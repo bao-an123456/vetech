@@ -246,9 +246,7 @@ public class VeDeptBusinessService {
             }
             while (updateList.size() >= writeBatchSize) {
                 List<VeDept4849> batch = new ArrayList<>(updateList.subList(0, writeBatchSize));
-                for (VeDept4849 upd : batch) {
-                    veDeptMapper.updateVeDept(upd);
-                }
+                veDeptMapper.updateBatch(batch);
                 updateList.subList(0, writeBatchSize).clear();
             }
 
@@ -269,9 +267,7 @@ public class VeDeptBusinessService {
         if (CollectionUtils.isNotEmpty(updateList)) {
             for (int i = 0; i < updateList.size(); i += writeBatchSize) {
                 List<VeDept4849> batch = updateList.subList(i, Math.min(i + writeBatchSize, updateList.size()));
-                for (VeDept4849 upd : batch) {
-                    veDeptMapper.updateVeDept(upd);
-                }
+                veDeptMapper.updateBatch(batch);
             }
             updateList.clear();
         }

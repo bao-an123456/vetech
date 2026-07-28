@@ -339,9 +339,7 @@ public class VeEmpBusinessService {
             }
             while (updateList.size() >= writeBatchSize) {
                 List<VeEmp4849> batch = new ArrayList<>(updateList.subList(0, writeBatchSize));
-                for (VeEmp4849 upd : batch) {
-                    veEmpMapper.updateVeEmp(upd);
-                }
+                veEmpMapper.updateBatch(batch);
                 updateList.subList(0, writeBatchSize).clear();
             }
 
@@ -363,9 +361,7 @@ public class VeEmpBusinessService {
         if (CollectionUtils.isNotEmpty(updateList)) {
             for (int i = 0; i < updateList.size(); i += writeBatchSize) {
                 List<VeEmp4849> batch = updateList.subList(i, Math.min(i + writeBatchSize, updateList.size()));
-                for (VeEmp4849 upd : batch) {
-                    veEmpMapper.updateVeEmp(upd);
-                }
+                veEmpMapper.updateBatch(batch);
             }
             updateList.clear();
         }
