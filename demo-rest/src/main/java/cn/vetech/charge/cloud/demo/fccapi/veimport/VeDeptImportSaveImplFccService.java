@@ -12,12 +12,14 @@ import cn.vetech.charge.openapi.OpenApiPackage;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 部门覆盖保存导入 (ImportSave) 异步服务实现
  */
 @RestController
+@RequestMapping({"/fccapi/DEMO_B2G_ImportSaveVeDept"})
 public class VeDeptImportSaveImplFccService implements VeDeptImportSaveFccApiService {
 
     @Autowired

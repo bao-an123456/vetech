@@ -98,7 +98,7 @@
         }
 
         .form-group {
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .form-group label {
@@ -303,8 +303,13 @@
         </div>
 
         <div class="form-group">
+            <label>后端服务基准地址 (Server Base URL)</label>
+            <input type="text" class="input-box" id="serverBaseUrl" placeholder="如 http://localhost:12345">
+        </div>
+
+        <div class="form-group">
             <label id="urlLabel">员工 Excel 文件地址 (FileUrl)</label>
-            <input type="text" class="input-box" id="fileUrl" value="http://localhost:8080/demo_emp.xlsx" placeholder="请输入 Excel 文件网络路径或本地路径">
+            <input type="text" class="input-box" id="fileUrl" value="http://localhost:12345/demo_emp.xlsx" placeholder="请输入 Excel 文件网络路径或本地路径">
         </div>
 
         <button class="submit-btn" onclick="startImportSave()">一键开启覆盖保存导入 (自动弹出进度框)</button>
@@ -344,12 +349,31 @@
         let pollTimer = null;
         let activeTaskId = null;
 
+        // 初始化基准服务地址
+        window.addEventListener('DOMContentLoaded', () => {
+            const serverInput = document.getElementById('serverBaseUrl');
+            if (window.location.protocol.startsWith('http')) {
+                serverInput.value = window.location.origin;
+            } else {
+                serverInput.value = 'http://localhost:12345';
+            }
+        });
+
+        function getBaseUrl() {
+            let url = document.getElementById('serverBaseUrl').value.trim();
+            if (!url) {
+                url = 'http://localhost:12345';
+            }
+            return url.replace(/\/+$/, '');
+        }
+
         function switchType(type) {
             currentType = type;
             document.getElementById('tabEmp').classList.toggle('active', type === 'emp');
             document.getElementById('tabDept').classList.toggle('active', type === 'dept');
             document.getElementById('urlLabel').innerText = type === 'emp' ? '员工 Excel 文件地址 (FileUrl)' : '部门 Excel 文件地址 (FileUrl)';
-            document.getElementById('fileUrl').value = type === 'emp' ? 'http://localhost:8080/demo_emp.xlsx' : 'http://localhost:8080/demo_dept.xlsx';
+            const baseUrl = getBaseUrl();
+            document.getElementById('fileUrl').value = type === 'emp' ? `${baseUrl}/demo_emp.xlsx` : `${baseUrl}/demo_dept.xlsx`;
         }
 
         async function startImportSave() {
@@ -359,13 +383,15 @@
                 return;
             }
 
+            const baseUrl = getBaseUrl();
+
             // 1. 自动弹出进度框
             openModal();
 
             // 2. 发起异步 Save 导入请求
-            const apiUrl = currentType === 'emp' ? '/fccapi/DEMO_B2G_ImportSaveVeEmp' : '/fccapi/DEMO_B2G_ImportSaveVeDept';
+            const apiPath = currentType === 'emp' ? '/fccapi/DEMO_B2G_ImportSaveVeEmp' : '/fccapi/DEMO_B2G_ImportSaveVeDept';
             try {
-                const res = await fetch(apiUrl, {
+                const res = await fetch(baseUrl + apiPath, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -378,15 +404,15 @@
                 if (data && data.response && data.response.taskId) {
                     activeTaskId = data.response.taskId;
                     // 3. 自动开启智能进度跟踪
-                    startAutoPolling(activeTaskId);
+                    startAutoPolling(baseUrl, activeTaskId);
                 } else {
-                    document.getElementById('statusText').innerText = "请求异常：" + (data.message || "未知错误");
+                    document.getElementById('statusText').innerText = "请求异常：" + (data.message || (data.status ? "HTTP " + data.status : "接口未找到"));
                     document.getElementById('spinner').style.display = 'none';
                     document.getElementById('closeBtn').style.display = 'inline-block';
                 }
             } catch (err) {
                 console.error("请求失败", err);
-                document.getElementById('statusText').innerText = "网络通信异常";
+                document.getElementById('statusText').innerText = "网络通信异常 (请确认地址与跨域)";
                 document.getElementById('spinner').style.display = 'none';
                 document.getElementById('closeBtn').style.display = 'inline-block';
             }
@@ -408,12 +434,12 @@
             if (pollTimer) clearInterval(pollTimer);
         }
 
-        function startAutoPolling(taskId) {
+        function startAutoPolling(baseUrl, taskId) {
             if (pollTimer) clearInterval(pollTimer);
 
             pollTimer = setInterval(async () => {
                 try {
-                    const res = await fetch('/fccapi/DEMO_B2G_QueryImportProgress', {
+                    const res = await fetch(baseUrl + '/fccapi/DEMO_B2G_QueryImportProgress', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

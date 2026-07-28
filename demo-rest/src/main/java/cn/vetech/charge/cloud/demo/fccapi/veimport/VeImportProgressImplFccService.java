@@ -12,12 +12,14 @@ import cn.vetech.charge.openapi.OpenApiPackage;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 异步导入任务进度查询服务实现
  */
 @RestController
+@RequestMapping({"/fccapi/DEMO_B2G_QueryImportProgress"})
 public class VeImportProgressImplFccService implements VeImportProgressFccApiService {
 
     @Autowired
