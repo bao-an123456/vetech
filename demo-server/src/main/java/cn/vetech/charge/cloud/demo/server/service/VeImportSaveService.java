@@ -53,12 +53,19 @@ public class VeImportSaveService {
         if (StringUtils.isBlank(fileUrl)) {
             throw new IllegalArgumentException("fileUrl不能为空");
         }
-        if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-            try (InputStream inputStream = new URL(fileUrl).openStream()) {
+        String cleanUrl = fileUrl.trim();
+        if (cleanUrl.startsWith("file:///")) {
+            cleanUrl = cleanUrl.substring(8);
+        } else if (cleanUrl.startsWith("file:/")) {
+            cleanUrl = cleanUrl.substring(6);
+        }
+
+        if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+            try (InputStream inputStream = new URL(cleanUrl).openStream()) {
                 return ExcelImportUtil.importExcel(inputStream, clazz, params);
             }
         } else {
-            return ExcelImportUtil.importExcel(new File(fileUrl), clazz, params);
+            return ExcelImportUtil.importExcel(new File(cleanUrl), clazz, params);
         }
     }
 
