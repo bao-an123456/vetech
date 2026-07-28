@@ -27,7 +27,7 @@
 ### 模块一：`前端智能自动弹出进度框 UI` [新增]
 
 #### 1. `import_progress_ui.html`
-- **路径**：`d:\Desktop\javademo\import_progress_ui.html` 及 `demo-rest/src/main/resources/static/import_progress_ui.html`
+- **唯一标准路径**：`demo-rest/src/main/resources/static/import_progress_ui.html`
 - **特点**：
   - 支持员工与部门标签页切换。
   - **自动弹出进程框**：包含 0%~100% 渐变 Glow 进度条、实时条数 `2500 / 5000` 统计、耗时毫秒数与自动完成打卡。
@@ -61,7 +61,7 @@
 
 ## 3. 使用方法
 
-直接双击打开本地 [import_progress_ui.html](file:///d:/Desktop/javademo/import_progress_ui.html) 或启动项目后访问 `http://localhost:8080/import_progress_ui.html`：
+启动项目后直接访问标准 HTTP 路径 `http://localhost:8080/import_progress_ui.html`：
 1. 选择“员工数据覆盖保存”或“部门数据覆盖保存”。
 2. 点击 **“一键开启覆盖保存导入”**。
 3. **进程框将自动弹窗**，动态展示实时百分比进度条与完成状态，无需手动调用任何接口！
