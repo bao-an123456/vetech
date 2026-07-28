@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 @Service
 public class VeImportInsertService {
 
-    private static final int BATCH_SIZE = 100;
+    private static final int BATCH_SIZE = 50;
 
     @Autowired
     private VeDeptMapper veDeptMapper;
@@ -236,17 +236,29 @@ public class VeImportInsertService {
             }
             String qybh = openApiUserVO.getQybh();
 
-            List<VeEmp4849> existEmpList = veEmpMapper.selectList(
-                    new EntityWrapper<VeEmp4849>().eq("qybh", qybh));
-            Set<String> existGhSet = existEmpList != null ? existEmpList.stream().map(VeEmp4849::getGh).collect(Collectors.toSet()) : new HashSet<>();
+            Set<String> allBatchGhSet = importList.stream().map(VeEmpImportVO::getGh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
+            Set<String> allBatchDeptBhSet = importList.stream().map(VeEmpImportVO::getDeptBh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
 
-            List<VeDept4849> deptList = veDeptMapper.selectList(
-                    new EntityWrapper<VeDept4849>().eq("qybh", qybh));
-            Map<String, String> bhToDeptIdMap = deptList != null ? deptList.stream().collect(Collectors.toMap(VeDept4849::getBh, VeDept4849::getDeptId, (a, b) -> a)) : new HashMap<>();
+            Set<String> existGhSet = new HashSet<>();
+            if (!allBatchGhSet.isEmpty()) {
+                List<VeEmp4849> existEmpList = veEmpMapper.selectList(
+                        new EntityWrapper<VeEmp4849>().eq("qybh", qybh).in("gh", allBatchGhSet));
+                if (existEmpList != null) {
+                    existGhSet = existEmpList.stream().map(VeEmp4849::getGh).collect(Collectors.toSet());
+                }
+            }
+
+            Map<String, String> bhToDeptIdMap = new HashMap<>();
+            if (!allBatchDeptBhSet.isEmpty()) {
+                List<VeDept4849> deptList = veDeptMapper.selectList(
+                        new EntityWrapper<VeDept4849>().eq("qybh", qybh).in("bh", allBatchDeptBhSet));
+                if (deptList != null) {
+                    bhToDeptIdMap = deptList.stream().collect(Collectors.toMap(VeDept4849::getBh, VeDept4849::getDeptId, (a, b) -> a));
+                }
+            }
 
             Map<String, String> ghToIdMap = new HashMap<>();
             Set<String> batchGhSet = new HashSet<>();
-            Set<String> allBatchGhSet = importList.stream().map(VeEmpImportVO::getGh).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
 
             List<VeEmpImportVO> validVoList = new ArrayList<>();
             List<VeEmp4849> empList = new ArrayList<>();
