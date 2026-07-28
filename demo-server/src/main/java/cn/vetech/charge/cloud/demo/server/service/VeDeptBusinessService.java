@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class VeDeptBusinessService {
@@ -89,7 +90,7 @@ public class VeDeptBusinessService {
 
     @Transactional(rollbackFor = Exception.class)
     public String syncDeptBatchData(String qybh, boolean isIncremental) {
-        int batchSize = 500; // 500 个一批
+        int batchSize = syncConfigProperties.getPageSize(); // 从配置获取 500 个一批
         String batchId = UUID.randomUUID().toString().replace("-", "");
         List<String> auditLogs = new ArrayList<>();
         auditLogs.add("【部门数据同步开启】批次ID: " + batchId + ", 企业编号: " + qybh + ", 增量同步: " + isIncremental);
@@ -103,7 +104,8 @@ public class VeDeptBusinessService {
             if (isIncremental) {
                 lastSyncTime = veDeptTempMapper.selectMaxUpdateTime(qybh);
                 if (lastSyncTime == null) {
-                    List<VeDept4849> latestDepts = veDeptMapper.selectList(
+                    List<VeDept4849> latestDepts = veDeptMapper.selectPage(
+                            new Page<VeDept4849>(1, 1),
                             new EntityWrapper<VeDept4849>().eq("qybh", qybh).orderBy("update_time", false)
                     );
                     if (CollectionUtils.isNotEmpty(latestDepts)) {
@@ -183,48 +185,71 @@ public class VeDeptBusinessService {
     }
 
     private void mergeTempDeptToBusinessTable(String qybh, List<String> auditLogs, int batchSize) {
-        List<VeDeptTemp4849> tempDepts = veDeptTempMapper.selectList(new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh));
-        if (CollectionUtils.isEmpty(tempDepts)) {
+        int pageSize = (batchSize > 0) ? batchSize : syncConfigProperties.getPageSize();
+        int totalTempCount = veDeptTempMapper.selectCount(new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh));
+        if (totalTempCount <= 0) {
             return;
         }
 
-        List<VeDept4849> existDepts = veDeptMapper.selectList(new EntityWrapper<VeDept4849>().eq("qybh", qybh));
-        Map<String, VeDept4849> existBhMap = new HashMap<>();
-        if (CollectionUtils.isNotEmpty(existDepts)) {
-            for (VeDept4849 exist : existDepts) {
-                existBhMap.put(exist.getBh(), exist);
+        int totalPages = (int) Math.ceil((double) totalTempCount / pageSize);
+
+        for (int page = 1; page <= totalPages; page++) {
+            List<VeDeptTemp4849> tempDepts = veDeptTempMapper.selectPage(
+                    new Page<VeDeptTemp4849>(page, pageSize),
+                    new EntityWrapper<VeDeptTemp4849>().eq("qybh", qybh)
+            );
+            if (CollectionUtils.isEmpty(tempDepts)) {
+                continue;
             }
-        }
 
-        List<VeDept4849> insertList = new ArrayList<>();
-        List<VeDept4849> updateList = new ArrayList<>();
+            Set<String> batchBhs = tempDepts.stream()
+                    .map(VeDeptTemp4849::getBh)
+                    .filter(StringUtils::isNotBlank)
+                    .collect(Collectors.toSet());
 
-        for (VeDeptTemp4849 temp : tempDepts) {
-            VeDept4849 exist = existBhMap.get(temp.getBh());
-            if (exist == null) {
-                insertList.add(buildDeptFromTemp(temp));
-            } else {
-                if (DataCleanUtils.isManualRecord(exist.getDataSource())) {
-                    auditLogs.add("【跳过手工维护部门】部门编号: " + exist.getBh() + " (dataSource=1)");
-                    continue;
+            Map<String, VeDept4849> existBhMap = new HashMap<>();
+            if (CollectionUtils.isNotEmpty(batchBhs)) {
+                List<VeDept4849> existDepts = veDeptMapper.selectList(
+                        new EntityWrapper<VeDept4849>().eq("qybh", qybh).in("bh", batchBhs)
+                );
+                if (CollectionUtils.isNotEmpty(existDepts)) {
+                    for (VeDept4849 exist : existDepts) {
+                        existBhMap.put(exist.getBh(), exist);
+                    }
                 }
-                VeDept4849 updDept = buildDeptFromTemp(temp);
-                updDept.setId(exist.getId());
-                updateList.add(updDept);
             }
-        }
 
-        // 按 500 个一批批量合并
-        for (int i = 0; i < insertList.size(); i += batchSize) {
-            List<VeDept4849> batch = insertList.subList(i, Math.min(i + batchSize, insertList.size()));
-            for (VeDept4849 insert : batch) {
-                veDeptMapper.insert(insert);
+            List<VeDept4849> insertList = new ArrayList<>();
+            List<VeDept4849> updateList = new ArrayList<>();
+
+            for (VeDeptTemp4849 temp : tempDepts) {
+                VeDept4849 exist = existBhMap.get(temp.getBh());
+                if (exist == null) {
+                    insertList.add(buildDeptFromTemp(temp));
+                } else {
+                    if (DataCleanUtils.isManualRecord(exist.getDataSource())) {
+                        auditLogs.add("【跳过手工维护部门】部门编号: " + exist.getBh() + " (dataSource=1)");
+                        continue;
+                    }
+                    VeDept4849 updDept = buildDeptFromTemp(temp);
+                    updDept.setId(exist.getId());
+                    updateList.add(updDept);
+                }
             }
-        }
-        for (int i = 0; i < updateList.size(); i += batchSize) {
-            List<VeDept4849> batch = updateList.subList(i, Math.min(i + batchSize, updateList.size()));
-            for (VeDept4849 upd : batch) {
-                veDeptMapper.updateVeDept(upd);
+
+            if (CollectionUtils.isNotEmpty(insertList)) {
+                veDeptMapper.insertBatch(insertList);
+            }
+            if (CollectionUtils.isNotEmpty(updateList)) {
+                for (VeDept4849 upd : updateList) {
+                    veDeptMapper.updateVeDept(upd);
+                }
+            }
+
+            try {
+                Thread.sleep(syncConfigProperties.getPageSleepMs());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }

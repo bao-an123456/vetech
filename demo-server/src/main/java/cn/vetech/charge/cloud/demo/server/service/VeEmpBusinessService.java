@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class VeEmpBusinessService {
@@ -143,7 +144,7 @@ public class VeEmpBusinessService {
     @Transactional(rollbackFor = Exception.class)
     public String syncEmpBatchData(String qybh, boolean isIncremental, int batchSize) {
         if (batchSize <= 0) {
-            batchSize = 500; // 严格按照 500 个一批
+            batchSize = syncConfigProperties.getPageSize(); // 从配置获取 500 个一批
         }
         String batchId = UUID.randomUUID().toString().replace("-", "");
         List<String> auditLogs = new ArrayList<>();
@@ -158,7 +159,8 @@ public class VeEmpBusinessService {
             if (isIncremental) {
                 lastSyncTime = veEmpTempMapper.selectMaxUpdateTime(qybh);
                 if (lastSyncTime == null) {
-                    List<VeEmp4849> latestEmps = veEmpMapper.selectList(
+                    List<VeEmp4849> latestEmps = veEmpMapper.selectPage(
+                            new Page<VeEmp4849>(1, 1),
                             new EntityWrapper<VeEmp4849>().eq("qybh", qybh).orderBy("update_time", false)
                     );
                     if (CollectionUtils.isNotEmpty(latestEmps)) {
@@ -266,55 +268,80 @@ public class VeEmpBusinessService {
     }
 
     /**
-     * 将临时表数据合并写入正式业务表（保持手工维护数据不改变，按 500 个一批）
+     * 将临时表数据合并写入正式业务表（保持手工维护数据不改变，按 500 个一批分页合并）
      */
     private void mergeTempToBusinessTable(String qybh, boolean isTriggeredCircuitBreaker, List<String> auditLogs, int batchSize) {
-        List<VeEmpTemp4849> tempEmps = veEmpTempMapper.selectList(new EntityWrapper<VeEmpTemp4849>().eq("qybh", qybh));
-        if (CollectionUtils.isEmpty(tempEmps)) {
+        int pageSize = (batchSize > 0) ? batchSize : syncConfigProperties.getPageSize();
+        int totalTempCount = veEmpTempMapper.selectCount(new EntityWrapper<VeEmpTemp4849>().eq("qybh", qybh));
+        if (totalTempCount <= 0) {
             return;
         }
 
-        List<VeEmp4849> existEmps = veEmpMapper.selectList(new EntityWrapper<VeEmp4849>().eq("qybh", qybh));
-        Map<String, VeEmp4849> existGhMap = new HashMap<>();
-        if (CollectionUtils.isNotEmpty(existEmps)) {
-            for (VeEmp4849 exist : existEmps) {
-                existGhMap.put(exist.getGh(), exist);
+        int totalPages = (int) Math.ceil((double) totalTempCount / pageSize);
+
+        for (int page = 1; page <= totalPages; page++) {
+            List<VeEmpTemp4849> tempEmps = veEmpTempMapper.selectPage(
+                    new Page<VeEmpTemp4849>(page, pageSize),
+                    new EntityWrapper<VeEmpTemp4849>().eq("qybh", qybh)
+            );
+            if (CollectionUtils.isEmpty(tempEmps)) {
+                continue;
             }
-        }
 
-        List<VeEmp4849> insertList = new ArrayList<>();
-        List<VeEmp4849> updateList = new ArrayList<>();
+            Set<String> batchGhs = tempEmps.stream()
+                    .map(VeEmpTemp4849::getGh)
+                    .filter(StringUtils::isNotBlank)
+                    .collect(Collectors.toSet());
 
-        for (VeEmpTemp4849 temp : tempEmps) {
-            VeEmp4849 exist = existGhMap.get(temp.getGh());
-
-            if (exist == null) {
-                insertList.add(buildEmpFromTemp(temp));
-            } else {
-                if (DataCleanUtils.isManualRecord(exist.getDataSource())) {
-                    auditLogs.add("【跳过手工数据】工号: " + exist.getGh() + " (dataSource=1)");
-                    continue;
+            Map<String, VeEmp4849> existGhMap = new HashMap<>();
+            if (CollectionUtils.isNotEmpty(batchGhs)) {
+                List<VeEmp4849> existEmps = veEmpMapper.selectList(
+                        new EntityWrapper<VeEmp4849>().eq("qybh", qybh).in("gh", batchGhs)
+                );
+                if (CollectionUtils.isNotEmpty(existEmps)) {
+                    for (VeEmp4849 exist : existEmps) {
+                        existGhMap.put(exist.getGh(), exist);
+                    }
                 }
-
-                VeEmp4849 updEmp = buildEmpFromTemp(temp);
-                updEmp.setId(exist.getId());
-
-                if (isTriggeredCircuitBreaker) {
-                    updEmp.setAccountStatus(exist.getAccountStatus());
-                }
-                updateList.add(updEmp);
             }
-        }
 
-        // 按照 500 个一批批量写入
-        for (int i = 0; i < insertList.size(); i += batchSize) {
-            List<VeEmp4849> batch = insertList.subList(i, Math.min(i + batchSize, insertList.size()));
-            veEmpMapper.insertBatch(batch);
-        }
-        for (int i = 0; i < updateList.size(); i += batchSize) {
-            List<VeEmp4849> batch = updateList.subList(i, Math.min(i + batchSize, updateList.size()));
-            for (VeEmp4849 upd : batch) {
-                veEmpMapper.updateVeEmp(upd);
+            List<VeEmp4849> insertList = new ArrayList<>();
+            List<VeEmp4849> updateList = new ArrayList<>();
+
+            for (VeEmpTemp4849 temp : tempEmps) {
+                VeEmp4849 exist = existGhMap.get(temp.getGh());
+
+                if (exist == null) {
+                    insertList.add(buildEmpFromTemp(temp));
+                } else {
+                    if (DataCleanUtils.isManualRecord(exist.getDataSource())) {
+                        auditLogs.add("【跳过手工数据】工号: " + exist.getGh() + " (dataSource=1)");
+                        continue;
+                    }
+
+                    VeEmp4849 updEmp = buildEmpFromTemp(temp);
+                    updEmp.setId(exist.getId());
+
+                    if (isTriggeredCircuitBreaker) {
+                        updEmp.setAccountStatus(exist.getAccountStatus());
+                    }
+                    updateList.add(updEmp);
+                }
+            }
+
+            if (CollectionUtils.isNotEmpty(insertList)) {
+                veEmpMapper.insertBatch(insertList);
+            }
+            if (CollectionUtils.isNotEmpty(updateList)) {
+                for (VeEmp4849 upd : updateList) {
+                    veEmpMapper.updateVeEmp(upd);
+                }
+            }
+
+            try {
+                Thread.sleep(syncConfigProperties.getPageSleepMs());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }
